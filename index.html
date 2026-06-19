@@ -132,6 +132,11 @@
   .pill.forsale{background:var(--sale-bg);color:var(--sale)}
   .pill.taken{background:var(--stop-bg);color:var(--stop)}
   .pill.unknown{background:var(--warn-bg);color:var(--warn)}
+  .avail{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pricetag{font-family:var(--mono);font-size:11.5px;color:var(--muted);opacity:.92;cursor:help}
+  .pricetag b{color:var(--ink)}
+  .resale{margin-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--muted);cursor:help;letter-spacing:.02em}
+  .resale b{color:var(--go);font-weight:600}
   .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
   .links{display:flex;gap:7px}
   .actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
@@ -210,15 +215,12 @@
         <button class="chip util" id="style-none" type="button">Clear</button>
         <button class="chip" data-style="real" aria-pressed="true">Real words</button>
         <button class="chip" data-style="two" aria-pressed="true">Two words</button>
+        <button class="chip" data-style="compound" aria-pressed="false">Compound</button>
         <button class="chip" data-style="brand" aria-pressed="true">Brandable</button>
-        <button class="chip" data-style="miss" aria-pressed="false">Misspelled</button>
+        <button class="chip" data-style="invent" aria-pressed="true">Invented</button>
+        <button class="chip" data-style="short" aria-pressed="false">Short &amp; punchy</button>
         <button class="chip" data-style="prefix" aria-pressed="false">Prefix (get / go / try)</button>
         <button class="chip" data-style="suffix" aria-pressed="false">Suffix (-ly / -ify)</button>
-        <button class="chip" data-style="blend" aria-pressed="false">Blend</button>
-        <button class="chip" data-style="allit" aria-pressed="false">Alliterative</button>
-        <button class="chip" data-style="short" aria-pressed="false">Short &amp; punchy</button>
-        <button class="chip" data-style="roots" aria-pressed="false">Classic roots</button>
-        <button class="chip" data-style="nature" aria-pressed="false">Nature &amp; animals</button>
       </div>
     </div>
 
@@ -284,9 +286,9 @@
   </div>
 
   <footer id="how">
-    <p><b>Name styles</b> (multi-select) decide what gets generated: <b>Real words</b> (single dictionary words), <b>Two words</b>, <b>Brandable</b> (invented, pronounceable), <b>Misspelled</b> (Flickr / Lyte-style respellings), <b>Prefix</b> and <b>Suffix</b> patterns, <b>Blend</b> (portmanteaus), <b>Alliterative</b> pairs, <b>Short &amp; punchy</b> (4–5 letters), <b>Classic roots</b> (Latin / Greek), and <b>Nature &amp; animals</b>. Tick any combination; the pool is built from all of them.</p>
+    <p><b>Name styles</b> (multi-select) decide what gets generated: <b>Real words</b> (single dictionary words), <b>Two words</b>, <b>Compound</b> (curated brandable word pairs), <b>Brandable</b> (invented, pronounceable), <b>Invented</b> (modern vowel-ending coinages), <b>Short &amp; punchy</b> (4–5 letters), and <b>Prefix</b> / <b>Suffix</b> patterns. Tick any combination; the pool is built from all of them, and names matching your keyword or its synonyms are ranked first.</p>
     <p style="margin-top:10px"><b>The search</b> scores every name, then checks domains best-first against public DNS until it fills <b>How many to find</b> in the states ticked under <b>Find</b> — or runs out. Short real-word .coms are mostly registered, so for lots of open names lean on Brandable / Short / Misspelled, add <b>.io</b> or <b>.ai</b>, or allow longer names.</p>
-    <p style="margin-top:10px"><b>The value score</b> weighs length, ending, word quality, pronounceability, cleanliness, and a trend boost (AI, crypto, health, energy, lending). It estimates appeal, not a guaranteed price. <b>States:</b> <b>open</b> means unregistered — register it today at any registrar (confirmed with a second DNS lookup so it's trustworthy); <b>for sale</b> means parked at a marketplace, buyable at the owner's price; <b>taken</b> means registered and not listed; <b>unverified</b> means DNS was ambiguous (grouped with taken, off by default). Open and For sale are the ones you can buy. Confirm on <b>Namecheap</b> before paying.</p>
+    <p style="margin-top:10px"><b>The value score</b> (0–100) is led by <b>length</b> and <b>word quality</b> — a short single real word scores far above a long coined string — then adjusted for extension, pronounceability, cleanliness (hyphens and numbers hurt), and a commercial-keyword boost (AI, crypto, health, lending). It rates brandability, not a guaranteed price. <b>Est. resale</b> is a separate rough dollar range estimated from those same traits, calibrated to real aftermarket patterns (3-letter .coms ~$10–50K, 4-letter ~$1–10K, one-word .coms much higher, gibberish under $100). It is an algorithm, not a live appraisal or a comp lookup — treat it as a ballpark and check NameBio for real comparable sales before pricing anything. <b>States:</b> <b>open</b> means unregistered — register it today at any registrar (confirmed with a second DNS lookup so it's trustworthy); <b>for sale</b> means parked at a marketplace, buyable at the owner's price; <b>taken</b> means registered and not listed; <b>unverified</b> means DNS was ambiguous (grouped with taken, off by default). Open and For sale are the ones you can buy. Confirm on <b>Namecheap</b> before paying.</p>
     <p style="margin-top:10px"><b>More buying options.</b> Open names link out to several registrars — Namecheap, Porkbun, Dynadot, GoDaddy — so you can cross-check availability and compare registration prices, since a name not showing on one sometimes shows on another. For-sale names get a tile listing the marketplaces they may be sold on (Sedo, Afternic, Dan, GoDaddy, Atom) in one place. Live asking prices can't be read in the browser (marketplaces block cross-site requests and there's no free price feed), so the tile links out to each listing; pulling real prices and merging duplicate listings needs those marketplaces' APIs through a backend.</p>
   </footer>
 </div>
@@ -308,11 +310,47 @@ const BRAND_PRE = "get go try my use join the we on up run do ask hey with".spli
 const BRAND_SUF = "ly ify io ai app hub labs hq ster fy zy sy oo ora ix able".split(" ");
 // business / brandable words that pair well after almost any keyword (workout+hub, class+pass)
 const BIZ = "hub lab labs works studio club spot zone app hq pro base kit space center group collective method plan flow crew squad pass daily now go co academy coach training program session room circle league guild loop nest deck desk works".split(" ");
+
+// curated synonym/related-word banks. If a keyword matches any word in a group,
+// the whole group is pulled in so names stay on-topic even without the exact word.
+const SYN_GROUPS = [
+  "fitness fit gym exercise workout training train strength cardio wellness active sweat muscle coach yoga pilates lift hiit reps endurance".split(" "),
+  "coffee cafe espresso brew roast bean latte mocha barista grind java cup brewing".split(" "),
+  "finance money capital fund invest wealth bank cash ledger asset equity credit budget fintech pay payments savings".split(" "),
+  "health care wellness clinic med medical doctor therapy heal vital nurse dental mind".split(" "),
+  "food eat kitchen dish plate meal recipe cook chef dine feast bite taste fork table cuisine bake bakery bread pastry dessert sweet".split(" "),
+  "tech app software code dev data cloud byte digital cyber stack logic pixel".split(" "),
+  "travel trip journey voyage tour explore wander roam nomad trek getaway escape adventure".split(" "),
+  "beauty skin glow care cosmetic salon spa makeup radiant luxe skincare".split(" "),
+  "pet dog cat paw furry vet kennel companion tail pup".split(" "),
+  "learn teach study academy school tutor course skill mentor scholar lesson edu".split(" "),
+  "home house estate property realty dwelling nest haven roof space living".split(" "),
+  "fashion style wear cloth apparel threads couture vogue trend outfit garb".split(" "),
+  "game play gamer quest arcade pixel level arena guild player".split(" "),
+  "music sound audio beat tune song melody rhythm sonic note studio".split(" "),
+  "eco green earth solar nature organic sustain renew leaf bloom planet".split(" "),
+  "brand market agency media growth reach buzz spark launch scale creative".split(" ")
+];
+function expandKeyword(tokens){
+  const out=[]; const seen=new Set();
+  const add=w=>{ if(w && w.length>=2 && w.length<=14 && !seen.has(w)){ seen.add(w); out.push(w); } };
+  const related=(t,w)=> t===w || (w.length>=4 && t.startsWith(w)) || (t.length>=4 && w.startsWith(t)); // invest~investing
+  for(const t of tokens) add(t);                                   // original words first
+  for(const t of tokens) for(const g of SYN_GROUPS){ if(g.some(w=>related(t,w))){ for(const w of g) add(w); } }
+  return out.slice(0,20);                                          // cap so generation stays bounded
+}
 const MISSPELLABLE = "coffee care clean cloud comet classic bright light quick spark photos quartz copper cobalt studio creative color favor center cyber crystal cool cream crisp craft circuit picture music camera cookie clever pickle ticket rocket basket simple".split(" ");
 const CON = "b d f g k l m n p r s t v z".split(" ");
 const ONSET = "b br d dr f fl g gr k kl l m n p pr r s sl sp st t tr v z ph th sk sn cr ch".split(" ");
 const VOW = "a e i o u ai ia eo io ou ae y".split(" ");
 const CODA = ["","","","n","r","x","l","s","m","ro","na","li","va","mo","do","ko","ta","vo"];
+// curated brandable banks for the Compound style (real, product-sounding words)
+const COMP_A = "north true blue iron swift bright prime bold peak core next open pure vivid noble clear apex stark stellar lunar solar polar grand royal".split(" ");
+const COMP_B = "forge loop wave peak base port mint nest spark drift ridge harbor labs works flow vault beam orbit slate ember spire crest haven anchor summit".split(" ");
+// onsets/vowels for the Invented style (pronounceable, vowel-leaning, startup feel)
+const INV_ON = "b br d f g k l m n p r s t v z tr st pl gr fl sk sn ch sh dr".split(" ");
+const INV_VO = "a e i o u ai ia eo oa".split(" ");
+const INV_END = "a o i e y".split("");
 
 const TREND = {
   ai:1,agent:1,agents:1,gpt:1,llm:1,bot:.9,copilot:1,prompt:.9,neural:.9,model:.8,compute:.8,gpu:.9,robot:.9,auto:.7,vision:.8,voice:.8,
@@ -336,8 +374,21 @@ const PARKING = [
 /* ---------- helpers ---------- */
 function sanitizeWord(s){ return (s||"").toLowerCase().replace(/[^a-z]/g,""); }
 const rp = arr => arr[(Math.random()*arr.length)|0];
-function coinName(syl){ let s=""; for(let i=0;i<syl;i++){ s+= rp(ONSET)+rp(VOW); } s+= rp(CODA); return s.replace(/[^a-z]/g,""); }
+function coinName(syl){
+  let s=""; for(let i=0;i<syl;i++){ s+= rp(ONSET)+rp(VOW); }
+  s = (s + (Math.random()<0.5 ? rp(CODA) : "")).replace(/[^a-z]/g,"").replace(/(.)\1{2,}/g,'$1$1');
+  return s;
+}
 function coinShort(){ const v="aeiouy".split(""); const len=Math.random()<.5?4:5; let s=""; for(let i=0;i<len;i++){ s+= (i%2===0)? rp(CON) : rp(v); } return s; }
+// modern brandable: 2-3 syllables, ends in a vowel (Brevo / Zola / Miro feel)
+function coinVowel(){
+  const syl = Math.random()<0.6 ? 2 : 3; let s="";
+  for(let i=0;i<syl;i++){ s += rp(INV_ON)+rp(INV_VO); }
+  s = s.replace(/[^a-z]/g,"");
+  if(!/[aeiouy]$/.test(s)) s += rp(INV_END);
+  s = s.replace(/(.)\1{2,}/g,'$1$1');
+  return (s.length>=4 && s.length<=7) ? s : "";
+}
 function respell(w){
   const out=new Set(); let x;
   x=w.replace(/^c(?=[aoulr])/,'k'); if(x!==w) out.add(x);
@@ -360,28 +411,27 @@ function blend(a,b){
 }
 
 /* ---------- generation by style ---------- */
-// tokens = keyword split into words, e.g. "workout class" -> ["workout","class"]
-function buildCandidates(tokens, styles){
+// seeds = keyword + curated synonyms, e.g. "workout" -> ["workout","fitness","gym","sweat",...]
+function buildCandidates(seeds, styles){
   const out=[]; const seen=new Set();
   const push=(sld,parts)=>{ if(sld && sld.length>=3 && !seen.has(sld)){ seen.add(sld); out.push({sld,parts}); } };
   const has=s=>styles.has(s);
 
   // ===== keyword-relevant names — always built when a keyword is present =====
   // These are what make results on-topic. They get ranked first in forge().
-  if(tokens.length){
-    const seeds = [...new Set([...tokens, tokens.join("")].filter(t=>t.length>=3 && t.length<=18))];
+  if(seeds.length){
+    const list = [...new Set(seeds.filter(t=>t.length>=3 && t.length<=18))];
     const adjSub = ["daily","fresh","pure","free","easy","ready","bold","smart","prime","swift","bright","true","vital","brave","quick","modern","simple"];
-    for(const t of seeds){
-      push(t,[t]);                                          // bare keyword
-      for(const b of BIZ) push(t+b,[t,b]);                  // workout+hub, class+pass
-      for(const p of BRAND_PRE) push(p+t,[p,t]);            // get+workout, join+class
-      for(const s of BRAND_SUF) push(t+s,[t,s]);            // workout+ly, class+ify
-      for(const a of adjSub) push(a+t,[a,t]);               // daily+workout, fresh+class
-      for(const n of NOUN.slice(0,40)) push(t+n,[t,n]);     // workout+peak, class+forge
+    for(const t of list){
+      push(t,[t]);                                          // bare keyword / synonym
+      for(const b of BIZ) push(t+b,[t,b]);                  // workout+hub, gym+pass
+      for(const p of BRAND_PRE) push(p+t,[p,t]);            // get+workout, join+gym
+      for(const s of BRAND_SUF) push(t+s,[t,s]);            // workout+ly, fit+ify
+      for(const a of adjSub) push(a+t,[a,t]);               // daily+workout, fresh+gym
+      for(const n of NOUN.slice(0,28)) push(t+n,[t,n]);     // workout+peak, gym+forge
     }
-    for(let i=0;i<tokens.length;i++) for(let j=0;j<tokens.length;j++){
-      if(i!==j) push(tokens[i]+tokens[j],[tokens[i],tokens[j]]); // workout+class, class+workout
-    }
+    const pc = list.slice(0,6);                             // pair the strongest seed words together
+    for(let i=0;i<pc.length;i++) for(let j=0;j<pc.length;j++){ if(i!==j) push(pc[i]+pc[j],[pc[i],pc[j]]); }
   }
 
   // ===== generic style names — variety + fill when keyword names run out =====
@@ -412,13 +462,18 @@ function buildCandidates(tokens, styles){
     for(const s of BRAND_SUF){ for(let i=0;i<16;i++){ push(rp(bases)+s,["·"]); } }
   }
   if(has("brand")){ for(let i=0;i<600;i++) push(coinName(2+((Math.random()*2)|0)),["·"]); }
+  if(has("invent")){ for(let i=0;i<620;i++){ const w=coinVowel(); if(w) push(w,["·"]); } }
+  if(has("compound")){
+    for(let i=0;i<420;i++){ const a=rp(COMP_A), b=rp(COMP_B); if(a!==b) push(a+b,[a,b]); }
+    if(seeds.length){ for(const t of seeds.slice(0,6)){ for(const b of COMP_B) push(t+b,[t,b]); for(const a of COMP_A) push(a+t,[a,t]); } } // keyword compounds too
+  }
   if(has("short")){ for(let i=0;i<500;i++) push(coinShort(),["·"]); }
   if(has("miss")){
     for(const w of MISSPELLABLE){ for(const t of respell(w)) push(t,["·"]); }
   }
   if(has("blend")){
     for(let i=0;i<320;i++){ const b=blend(rp(NOUN), rp(NOUN)); if(b) push(b,["·"]); }
-    if(tokens.length){ for(const t of tokens){ for(let i=0;i<80;i++){ const b=blend(t, rp([...NOUN,...ADJ])); if(b) push(b,[t]); } } } // blend keyword in too
+    if(seeds.length){ for(const t of seeds.slice(0,6)){ for(let i=0;i<60;i++){ const b=blend(t, rp([...NOUN,...ADJ])); if(b) push(b,[t]); } } }
   }
   if(has("roots")){
     for(const r of ROOTS){ push(r,["·"]); for(let k=0;k<2;k++) push(r+rp(NOUN),["·"]); }
@@ -427,11 +482,12 @@ function buildCandidates(tokens, styles){
   return out;
 }
 function generateNames(opts){
-  const tokens=(opts.seed||"").toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
+  const seedWords=(opts.seedWords && opts.seedWords.length) ? opts.seedWords
+                  : (opts.seed||"").toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
   const maxLen=Math.max(3,Math.min(40,parseInt(opts.maxLen,10)||15));
   const starts=sanitizeWord(opts.starts), ends=sanitizeWord(opts.ends);
   const styles=opts.styles;
-  let cands=buildCandidates(tokens,styles); const passed=[];
+  let cands=buildCandidates(seedWords,styles); const passed=[];
   for(const c of cands){
     if(c.sld.length>maxLen) continue;
     if(starts && !c.sld.startsWith(starts)) continue;
@@ -443,33 +499,87 @@ function generateNames(opts){
 }
 
 /* ---------- value score 0..100 ---------- */
-const TLD_VAL = {".com":16,".ai":15,".io":12,".co":10,".app":8,".dev":7,".net":6,".org":5};
+const TLD_VAL = {".com":18,".ai":16,".io":13,".co":10,".app":8,".dev":8,".net":6,".org":5};
+const LEN_PTS = [0,0,0,34,30,26,22,18,14,11,8,6,4,3,2,1]; // by length; >15 -> 0
+function phonetics(sld){
+  const L=sld.length||1;
+  const ratio=(sld.match(/[aeiou]/g)||[]).length / L;
+  const cl3=(sld.match(/[bcdfghjklmnpqrstvwxz]{3,}/g)||[]).length;
+  const cl4=(sld.match(/[bcdfghjklmnpqrstvwxz]{4,}/g)||[]).length;
+  const pronounceable = ratio>=0.25 && ratio<=0.60 && cl3===0;
+  return {ratio, cl3, cl4, pronounceable};
+}
 function valueScore(sld, tld, parts, tokens){
-  const reasons=[]; let s=0; const L=sld.length;
-  let lp; if(L<=3)lp=30;else if(L===4)lp=28;else if(L===5)lp=25;else if(L===6)lp=22;else if(L===7)lp=18;
-  else if(L===8)lp=15;else if(L===9)lp=12;else if(L===10)lp=9;else if(L<=12)lp=6;else if(L<=15)lp=3;else lp=1;
-  s+=lp; if(L<=6) reasons.push("short"); else if(L>=14) reasons.push("long");
+  const reasons=[]; const L=sld.length;
+  // 1) length — the biggest single lever, steep curve
+  let s = (L>=3 && L<=15) ? LEN_PTS[L] : (L<3?34:0);
+  if(L<=4) reasons.push("very short"); else if(L<=7) reasons.push("short"); else if(L>=13) reasons.push("long");
+  // 2) word quality — real words score much higher than coined
   const realParts = parts.filter(p=>DICT.has(p));
-  if(parts.length===1 && DICT.has(parts[0])){ s+=18; reasons.push("dictionary word"); }
-  else if(parts.length===2 && realParts.length===2){ s+=12; reasons.push("two real words"); }
-  else if(realParts.length>=1){ s+=8; }
-  else { s+=4; reasons.push("coined"); }
-  const tp = (TLD_VAL[tld]!=null)?TLD_VAL[tld]:4; s+=tp;
+  const ph = phonetics(sld);
+  if(parts.length===1 && DICT.has(parts[0])){ s+=30; reasons.push("real word"); }
+  else if(parts.length===2 && realParts.length===2){ s+=20; reasons.push("two real words"); }
+  else if(realParts.length>=1){ s+=12; reasons.push("real + coined"); }
+  else { s += ph.pronounceable?10:4; reasons.push(ph.pronounceable?"brandable":"coined"); }
+  // 3) extension
+  const tp=(TLD_VAL[tld]!=null)?TLD_VAL[tld]:3; s+=tp;
   if(tld===".com") reasons.push(".com"); else if(tld===".ai"||tld===".io") reasons.push(tld.slice(1)+" premium");
-  const vowels=(sld.match(/[aeiou]/g)||[]).length, ratio=vowels/Math.max(1,L); let pp=0;
-  if(ratio>=0.30 && ratio<=0.55) pp+=8; else if(ratio>=0.22 && ratio<=0.62) pp+=5; else pp+=1;
-  const clusters=(sld.match(/[bcdfghjklmnpqrstvwxz]{3,}/g)||[]).length;
-  if(clusters===0) pp+=4; else pp-=clusters*3;
-  const syl=(sld.match(/[aeiouy]+/g)||[]).length; if(syl>=2 && syl<=3) pp+=2;
-  pp=Math.max(0,Math.min(14,pp)); s+=pp;
-  if(pp>=12) reasons.push("easy to say"); if(clusters>0) reasons.push("hard cluster");
-  let cp=6; if(/-/.test(sld)){cp-=4;reasons.push("hyphen");} if(/[0-9]/.test(sld)){cp-=4;reasons.push("number");} s+=Math.max(0,cp);
+  // 4) pronounceability — a modifier that can subtract for ugly names
+  let pm=0;
+  if(ph.ratio>=0.30 && ph.ratio<=0.55) pm+=6; else if(ph.ratio>=0.22 && ph.ratio<=0.62) pm+=3; else pm-=3;
+  pm -= ph.cl3*5; pm -= ph.cl4*4; pm=Math.max(-12,Math.min(6,pm)); s+=pm;
+  if(pm>=5) reasons.push("easy to say"); else if(pm<=-4) reasons.push("hard to say");
+  // 5) cleanliness — hyphens/numbers hurt a lot
+  let cp=2; if(/-/.test(sld)){cp-=10;reasons.push("hyphen");} if(/[0-9]/.test(sld)){cp-=8;reasons.push("number");}
+  if(/(.)\1\1/.test(sld)) cp-=3; s+=cp;
+  // 6) trend / commercial keyword
   let tw=0; const checkSet=[...parts]; if(tokens&&tokens.length) for(const t of tokens) checkSet.push(t);
   for(const p of checkSet){ if(TREND[p]!=null && TREND[p]>tw) tw=TREND[p]; }
   if(tw>0){ s+=Math.round(tw*12); reasons.push("hot sector"); }
-  const score=Math.max(0,Math.min(100,Math.round(s)));
-  const tier = score>=78?"premium": score>=62?"strong": score>=48?"fair":"basic";
+  const score=Math.max(1,Math.min(100,Math.round(s)));
+  const tier = score>=80?"premium": score>=62?"strong": score>=44?"fair":"basic";
   return {score, tier, reasons};
+}
+
+/* ---------- estimated resale value (rough $ range) ---------- */
+// Anchored to NameBio/aftermarket patterns: 3L .com ~$10-50K, 4L .com ~$1-10K,
+// one-word .com much higher, two-word industry .com ~$1-15K, gibberish < $100.
+function roundNice(n){
+  if(n<100) return Math.round(n/10)*10;
+  if(n<500) return Math.round(n/50)*50;
+  if(n<2000) return Math.round(n/250)*250;
+  if(n<10000) return Math.round(n/500)*500;
+  if(n<50000) return Math.round(n/2500)*2500;
+  return Math.round(n/10000)*10000;
+}
+function fmtUSD(n){ if(n>=1000){ const k=n/1000; return "$"+(Number.isInteger(k)?k:k.toFixed(1))+"K"; } return "$"+n; }
+function resaleValue(sld, tld, parts, tokens){
+  const L=sld.length;
+  const realParts=parts.filter(p=>DICT.has(p));
+  const oneWord = parts.length===1 && DICT.has(parts[0]);
+  const twoWord = parts.length===2 && realParts.length===2;
+  const ph=phonetics(sld);
+  let mid;
+  if(L<=2) mid=120000;
+  else if(L===3) mid=18000;
+  else if(oneWord) mid = L<=4?40000 : L<=6?15000 : L<=8?6000 : L<=10?2500 : 1200;
+  else if(twoWord) mid = L<=8?2000 : L<=11?900 : L<=14?400 : 180;
+  else if(realParts.length>=1) mid = L<=8?700 : L<=11?350 : 150;
+  else if(ph.pronounceable) mid = L<=4?3000 : L<=5?1500 : L<=6?800 : L<=8?300 : 120;
+  else mid = L<=5?300 : L<=7?120 : 60;
+  // commercial keyword premium (ai, pay, crypto, loan, insurance…)
+  let kw=0; const cs=[...parts]; if(tokens) for(const t of tokens) cs.push(t);
+  for(const p of cs){ if(TREND[p]!=null && TREND[p]>kw) kw=TREND[p]; }
+  if(kw>0) mid *= (1 + kw*1.2);
+  // extension multiplier vs .com
+  const tmul={".com":1, ".ai":0.8, ".io":0.42, ".co":0.32, ".net":0.2, ".org":0.17, ".app":0.16, ".dev":0.15};
+  mid *= (tmul[tld]!=null?tmul[tld]:0.1);
+  if(/[-0-9]/.test(sld)) mid*=0.25;
+  if(ph.cl3>=1) mid*=0.6;
+  mid=Math.max(40, Math.round(mid));
+  const low=roundNice(mid*0.5), high=roundNice(mid*1.9);
+  const label = mid<110 ? "under $100" : (fmtUSD(low)+"–"+fmtUSD(high));
+  return {mid, low, high, label};
 }
 
 /* ---------- availability ---------- */
@@ -557,6 +667,25 @@ const host = $("results-host");
 const starred = new Map();
 let pool = [], poolTld = ".com", poolOthers = [];
 const availCache = new Map();
+let tldPrices = null; // { ".com": 11.06, ... } base registration prices from Porkbun
+async function loadPrices(){
+  if(tldPrices) return tldPrices;
+  try{
+    const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),6000);
+    const r = await fetch("/api/check?prices=1", {headers:{accept:"application/json"}, signal:ac.signal});
+    clearTimeout(t);
+    if(r.ok){ const j = await r.json(); if(j && j.prices) tldPrices = j.prices; }
+  }catch(e){}
+  if(!tldPrices) tldPrices = {};
+  return tldPrices;
+}
+function priceTag(state, tld){
+  if(state!=="available" || !tldPrices) return "";
+  const p = tldPrices[tld];
+  if(p==null) return "";
+  const txt = p>=100 ? Math.round(p) : (Number.isInteger(p) ? p : p.toFixed(2));
+  return `<span class="pricetag" title="Base ${tld} registration price at Porkbun — premium names cost more">≈ <b>$${txt}</b>/yr</span>`;
+}
 let searching = false, hasSearched = false, forgeTimer = null;
 
 function selectedTlds(){ return [...document.querySelectorAll("#tlds .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.tld); }
@@ -617,7 +746,8 @@ function cardHTML(domain, sld, tld, parts, idx, v, state, provider){
       <div class="vscore" data-tier="${v.tier}"><b>${v.score}</b><span>value</span></div>
     </div>
     <div class="meta">${sld.length} chars ${reasons} ${provTag}</div>
-    <div class="avail">${pillHTML(state)}</div>
+    <div class="avail">${pillHTML(state)} ${priceTag(state, tld)}</div>
+    ${(state==="available"||state==="forsale") && v.resale ? `<div class="resale" title="Rough estimate of aftermarket value based on length, word type, extension and keyword demand — an algorithm, not a live appraisal.">est. resale <b>${v.resale.label}</b></div>` : ""}
     ${tile}
     <div class="cardfoot">
       <div class="links">
@@ -666,6 +796,7 @@ async function confirmAvailable(matches){
 async function runSearch(){
   if(!pool.length || searching) return;
   searching=true; $("forge").disabled=true;
+  loadPrices();
   const want=wantCount(), minS=minScore();
   const wantBuf = Math.min(pool.length, Math.ceil(want*1.4)); // collect a buffer so confirmation drop-outs don't shrink the list
   const filtered = pool.filter(c=>c.v.score>=minS);
@@ -718,14 +849,16 @@ async function forge(){
   poolTld=tlds[0]; poolOthers=tlds.slice(1);
   const seedRaw = $("seed").value || "";
   const tokens = seedRaw.toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
-  const relList = tokens.filter(t=>t.length>=3); const relSet = relList.length?relList:tokens;
-  const raw=generateNames({ seed:seedRaw, maxLen:$("maxlen").value, starts:$("starts").value, ends:$("ends").value, styles });
+  const seedWords = expandKeyword(tokens);                  // keyword + curated synonyms
+  const relList = seedWords.filter(w=>w.length>=3); const relSet = relList.length?relList:seedWords;
+  const raw=generateNames({ seed:seedRaw, seedWords, maxLen:$("maxlen").value, starts:$("starts").value, ends:$("ends").value, styles });
   pool=raw.map(c=>{
-    const v=valueScore(c.sld, poolTld, c.parts, tokens);
-    const rel = relSet.some(t=>c.sld.includes(t)) ? 1 : 0;   // does the name contain the keyword?
+    const v=valueScore(c.sld, poolTld, c.parts, seedWords);
+    v.resale=resaleValue(c.sld, poolTld, c.parts, seedWords);
+    const rel = relSet.some(t=>c.sld.includes(t)) ? 1 : 0;   // contains the keyword or a synonym?
     if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
     return { ...c, v, rel };
-  }).sort((a,b)=> (b.rel-a.rel) || (b.v.score-a.v.score));     // keyword names first, then by value
+  }).sort((a,b)=> (b.rel-a.rel) || (b.v.score-a.v.score));     // related names first, then by value
   await runSearch();
 }
 
@@ -749,6 +882,7 @@ $("style-none").addEventListener("click",()=>{ document.querySelectorAll("#style
 $("minscore").addEventListener("input", updateSlider);
 $("minscore").addEventListener("change", ()=>{ if(pool.length) runSearch(); });
 updateSlider();
+loadPrices();
 requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add("lit")));
 </script>
 </body>

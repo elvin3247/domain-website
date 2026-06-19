@@ -125,6 +125,34 @@ async function namecheapMap(list) {
 function sanitize(d) { return String(d || "").trim().toLowerCase(); }
 const valid = d => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && d.length <= 80;
 
+// Porkbun public price list (no auth) -> base registration price per TLD we support.
+// Cached in-memory per warm instance; the response also carries a long edge-cache header.
+let _priceCache = null, _priceTs = 0;
+async function porkbunPrices() {
+  if (_priceCache && Date.now() - _priceTs < 6 * 3600 * 1000) return _priceCache;
+  const url = "https://api.porkbun.com/api/json/v3/pricing/get";
+  let pricing = null;
+  for (const opt of [{ method: "GET" }, { method: "POST", body: "{}" }]) {
+    try {
+      const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 7000);
+      const r = await fetch(url, { ...opt, headers: { "content-type": "application/json" }, signal: ac.signal });
+      clearTimeout(t);
+      if (!r.ok) continue;
+      const j = await r.json().catch(() => null);
+      if (j && j.status === "SUCCESS" && j.pricing) { pricing = j.pricing; break; }
+    } catch (e) { /* try next */ }
+  }
+  if (!pricing) return null;
+  const want = ["com", "ai", "io", "co", "net", "org", "app", "dev"];
+  const out = {};
+  for (const t of want) {
+    const p = pricing[t];
+    if (p && p.registration != null) { const n = parseFloat(p.registration); if (!isNaN(n)) out["." + t] = n; }
+  }
+  _priceCache = out; _priceTs = Date.now();
+  return out;
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=86400");
@@ -132,6 +160,14 @@ module.exports = async (req, res) => {
   const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
   const isBatch = !!q.domains;
   const confirm = !!q.confirm;
+
+  if (q.prices) {
+    const prices = await porkbunPrices();
+    res.setHeader("Cache-Control", "public, s-maxage=43200, stale-while-revalidate=86400");
+    res.status(200).json({ prices: prices || {} });
+    return;
+  }
+
   const list = (q.domains ? String(q.domains).split(",") : (q.domain ? [q.domain] : []))
     .map(sanitize).filter(valid).slice(0, 50);
 
