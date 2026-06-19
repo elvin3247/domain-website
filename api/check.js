@@ -23,10 +23,10 @@ const PARKING = [
 ];
 const enc = encodeURIComponent;
 
-async function fetchT(url, ms) {
+async function fetchT(url, ms, headers) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
-  try { return await fetch(url, { headers: { accept: "application/dns-json" }, signal: ac.signal }); }
+  try { return await fetch(url, { headers: headers || { accept: "application/dns-json" }, signal: ac.signal }); }
   finally { clearTimeout(t); }
 }
 
@@ -72,6 +72,23 @@ async function checkDomain(domain) {
   return { state: "unknown" };
 }
 
+// Authoritative registry double-check via RDAP. Used only to confirm domains that
+// DNS reported as "available", catching registered-but-undelegated false positives.
+async function rdapConfirm(domain) {
+  try {
+    const r = await fetchT("https://rdap.org/domain/" + enc(domain), 6000, { accept: "application/rdap+json" });
+    if (r.status === 404) return { state: "available" };          // registry has no record -> truly open
+    if (r.status >= 200 && r.status < 300) {
+      const j = await r.json().catch(() => null);
+      const ns = (j && Array.isArray(j.nameservers) ? j.nameservers : []).map(n => (n.ldhName || "").toLowerCase());
+      return classify(ns);                                        // registered -> taken / forsale
+    }
+    return { state: "available" };                                // couldn't determine -> leave as-is
+  } catch (e) {
+    return { state: "available" };
+  }
+}
+
 // server-side concurrency limiter
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
@@ -114,21 +131,27 @@ module.exports = async (req, res) => {
 
   const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
   const isBatch = !!q.domains;
+  const confirm = !!q.confirm;
   const list = (q.domains ? String(q.domains).split(",") : (q.domain ? [q.domain] : []))
     .map(sanitize).filter(valid).slice(0, 50);
 
   if (!list.length) { res.status(400).json({ error: "missing or invalid domain(s)" }); return; }
 
   try {
-    let results = await mapLimit(list, 16, checkDomain);
-    const nc = await namecheapMap(list);
-    if (nc) {
-      results = results.map((r, i) => {
-        const d = list[i];
-        if (nc[d] === true) return { state: "available", source: "namecheap" };
-        if (nc[d] === false && r.state === "available") return { state: "taken", source: "namecheap" };
-        return r;
-      });
+    let results;
+    if (confirm) {
+      results = await mapLimit(list, 8, rdapConfirm);          // authoritative registry double-check
+    } else {
+      results = await mapLimit(list, 16, checkDomain);
+      const nc = await namecheapMap(list);
+      if (nc) {
+        results = results.map((r, i) => {
+          const d = list[i];
+          if (nc[d] === true) return { state: "available", source: "namecheap" };
+          if (nc[d] === false && r.state === "available") return { state: "taken", source: "namecheap" };
+          return r;
+        });
+      }
     }
     if (isBatch) res.status(200).json({ results });
     else res.status(200).json(results[0]);

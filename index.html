@@ -631,16 +631,37 @@ function renderMatches(matches, evaluated){
     card.querySelector(".star").onclick=()=>{ if(starred.has(d)) starred.delete(d); else starred.set(d, sc); syncStars(); renderShortlist(); };
   });
 }
+// Second safety check: registry-confirm the "open" results before showing them.
+// DNS can't tell an unregistered domain from a registered-but-undelegated one;
+// RDAP (the registry protocol, server-side) can. Only the results we're about to
+// display are confirmed, so it stays well under RDAP rate limits.
+async function confirmAvailable(matches){
+  const avail = matches.filter(m=>m.state==="available");
+  if(!avail.length) return 0;
+  const pe=$("prog"); if(pe) pe.textContent="confirming open results…";
+  let downgraded=0;
+  for(let i=0;i<avail.length;i+=24){
+    const slice = avail.slice(i,i+24);
+    try{
+      const r = await fetch("/api/check?confirm=1&domains="+encodeURIComponent(slice.map(m=>m.c.sld+poolTld).join(",")), {headers:{accept:"application/json"}});
+      if(!r.ok) return downgraded;
+      const j = await r.json(); if(!j || !Array.isArray(j.results)) return downgraded;
+      slice.forEach((m,k)=>{ const st=j.results[k]; if(st && st.state && st.state!=="available"){ m.state=st.state; m.provider=st.provider; availCache.set(m.c.sld+poolTld, st); downgraded++; } });
+    }catch(e){ return downgraded; }   // no backend / error -> skip confirmation
+  }
+  return downgraded;
+}
 async function runSearch(){
   if(!pool.length || searching) return;
   searching=true; $("forge").disabled=true;
   const want=wantCount(), minS=minScore();
+  const wantBuf = Math.min(pool.length, Math.ceil(want*1.4)); // collect a buffer so confirmation drop-outs don't shrink the list
   const filtered = pool.filter(c=>c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
   const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
   const CHUNK = 24;
   const results=[]; let matchCount=0, idx=0, checked=0, lastProg=0;
-  while(idx<filtered.length && matchCount<want && checked<MAXCHECK){
+  while(idx<filtered.length && matchCount<wantBuf && checked<MAXCHECK){
     const slice = filtered.slice(idx, idx+CHUNK); const base=idx; idx+=slice.length;
     const states = await checkBatch(slice.map(c=>c.sld+poolTld));
     for(let k=0;k<slice.length;k++){
@@ -651,7 +672,9 @@ async function runSearch(){
     checked += slice.length;
     const now=performance.now(); if(now-lastProg>100){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${matchCount} · checked ${checked}`; }
   }
-  const matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
+  let matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
+  await confirmAvailable(matches);                                   // registry double-check
+  matches = matches.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
   renderMatches(matches, checked);
   searching=false; $("forge").disabled=false;
 }
