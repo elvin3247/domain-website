@@ -153,6 +153,74 @@ async function porkbunPrices() {
   return out;
 }
 
+// Google Trends daily trending searches via the public RSS feed (no auth).
+let _trCache = {}, _trTs = {};
+async function googleTrends(geo) {
+  geo = (String(geo || "US").toUpperCase().match(/[A-Z]{2}/) || ["US"])[0];
+  if (_trCache[geo] && Date.now() - _trTs[geo] < 30 * 60 * 1000) return _trCache[geo];
+  const urls = [
+    "https://trends.google.com/trending/rss?geo=" + geo,
+    "https://trends.google.com/trends/trendingsearches/daily/rss?geo=" + geo
+  ];
+  let xml = null;
+  for (const u of urls) {
+    try {
+      const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 7000);
+      const r = await fetch(u, { headers: { "user-agent": "Mozilla/5.0", "accept": "application/rss+xml,application/xml,text/xml" }, signal: ac.signal });
+      clearTimeout(t);
+      if (r.ok) { const txt = await r.text(); if (txt && txt.indexOf("<item") >= 0) { xml = txt; break; } }
+    } catch (e) { /* try next */ }
+  }
+  if (!xml) return null;
+  const items = [], re = /<item>([\s\S]*?)<\/item>/g; let m;
+  while ((m = re.exec(xml)) && items.length < 25) {
+    const block = m[1];
+    const tm = /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(block);
+    const af = /<ht:approx_traffic>([\s\S]*?)<\/ht:approx_traffic>/.exec(block);
+    if (tm) { const title = tm[1].replace(/<[^>]+>/g, "").trim(); if (title) items.push({ title, traffic: af ? af[1].trim() : null }); }
+  }
+  _trCache[geo] = items; _trTs[geo] = Date.now();
+  return items;
+}
+
+// AI-generated brandable names via the Anthropic API. Needs ANTHROPIC_API_KEY in the
+// environment; model overridable with ANVIL_AI_MODEL. Cached per keyword to limit cost.
+let _aiCache = {}, _aiTs = {};
+async function aiNames(seed, maxLen) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return { names: [], error: "AI names need an ANTHROPIC_API_KEY set in your Vercel project." };
+  seed = String(seed || "").slice(0, 80).trim();
+  if (!seed) return { names: [] };
+  const maxL = Math.max(3, Math.min(20, parseInt(maxLen, 10) || 14));
+  const ck = seed.toLowerCase() + "|" + maxL;
+  if (_aiCache[ck] && Date.now() - _aiTs[ck] < 10 * 60 * 1000) return { names: _aiCache[ck] };
+  const model = process.env.ANVIL_AI_MODEL || "claude-haiku-4-5-20251001";
+  const sys = "You are a brand naming expert generating short, brandable, pronounceable company and domain names. Output ONLY names, one per line. Each name must be lowercase, letters a-z only (no spaces, numbers, hyphens, punctuation, or domain extensions), and between 3 and " + maxL + " characters. No explanations, no numbering.";
+  const user = "Generate 40 brandable name ideas for a business about: \"" + seed + "\". Mix real-word, invented/coined, and compound styles. Favor short, memorable, startup-quality names that sound like real brands. Avoid generic dictionary mashups.";
+  try {
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 18000);
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model, max_tokens: 700, system: sys, messages: [{ role: "user", content: user }] }),
+      signal: ac.signal
+    });
+    clearTimeout(t);
+    if (!r.ok) { return { names: [], error: "AI request failed (" + r.status + "). Check the API key / model." }; }
+    const j = await r.json();
+    const text = (j.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+    const STOP = new Set("here there these those some ideas names name sure okay yeah the for and your you list below brand business domain options option".split(" "));
+    const out = [], seen = new Set();
+    for (let ln of text.split(/\n+/)) {
+      ln = ln.trim().replace(/^[\d).\-*\s]+/, "");
+      const c = (ln.split(/\s+/)[0] || "").toLowerCase().replace(/[^a-z]/g, "");
+      if (c.length >= 3 && c.length <= maxL && !seen.has(c) && !STOP.has(c)) { seen.add(c); out.push(c); }
+    }
+    _aiCache[ck] = out; _aiTs[ck] = Date.now();
+    return { names: out };
+  } catch (e) { return { names: [], error: "AI request timed out." }; }
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=86400");
@@ -165,6 +233,20 @@ module.exports = async (req, res) => {
     const prices = await porkbunPrices();
     res.setHeader("Cache-Control", "public, s-maxage=43200, stale-while-revalidate=86400");
     res.status(200).json({ prices: prices || {} });
+    return;
+  }
+
+  if (q.trends) {
+    const items = await googleTrends(q.geo);
+    res.setHeader("Cache-Control", "public, s-maxage=1800, stale-while-revalidate=3600");
+    res.status(200).json({ trends: items || [] });
+    return;
+  }
+
+  if (q.ai) {
+    const out = await aiNames(q.seed, q.max);
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json(out);
     return;
   }
 

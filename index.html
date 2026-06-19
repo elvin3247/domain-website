@@ -137,6 +137,23 @@
   .pricetag b{color:var(--ink)}
   .resale{margin-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--muted);cursor:help;letter-spacing:.02em}
   .resale b{color:var(--go);font-weight:600}
+  .tabs{display:flex;gap:8px;margin:0 0 16px}
+  .tabbtn{font-family:var(--display);font-size:14px;font-weight:600;color:var(--muted);background:var(--bg-1);border:1px solid var(--line);border-radius:11px;padding:9px 18px;cursor:pointer;transition:.18s}
+  .tabbtn:hover{color:var(--ink);border-color:var(--line-2)}
+  .tabbtn.active{color:#1a1206;background:var(--molten);border-color:transparent;box-shadow:0 6px 20px rgba(255,138,61,.28)}
+  .trends-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .trends-controls{display:flex;gap:8px;align-items:center}
+  .mini-select{font-family:var(--body);font-size:13px;color:var(--ink);background:var(--bg-2);border:1px solid var(--line-2);border-radius:9px;padding:8px 10px;cursor:pointer}
+  .trends-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .trend-card{display:flex;align-items:center;gap:11px;text-align:left;font-family:var(--body);background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;cursor:pointer;transition:.16s;color:var(--ink)}
+  .trend-card:hover{border-color:var(--hot-2);transform:translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.28)}
+  .trend-card .tr-rank{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--hot-2);min-width:20px}
+  .trend-card .tr-term{flex:1;font-size:14px;font-weight:600;line-height:1.25}
+  .trend-card .tr-traf{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
+  .trends-msg{grid-column:1/-1;color:var(--muted);font-size:14px;padding:24px 4px;text-align:center}
+  .ai-chip{border-color:var(--hot-2)!important;color:var(--hot-1)}
+  .ai-chip[aria-pressed="true"]{color:#1a1206;background:var(--molten);border-color:transparent!important;box-shadow:0 5px 16px rgba(255,138,61,.3)}
+  .word-tag.ai{color:#1a1206;background:var(--molten);border-color:transparent}
   .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
   .links{display:flex;gap:7px}
   .actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
@@ -199,6 +216,12 @@
     </div>
   </header>
 
+  <nav class="tabs reveal d2">
+    <button class="tabbtn active" id="tab-btn-find" type="button">Find domains</button>
+    <button class="tabbtn" id="tab-btn-trends" type="button">Trending ideas</button>
+  </nav>
+
+  <div id="tab-find">
   <section class="panel reveal d2">
     <div class="seedrow">
       <div class="field">
@@ -213,6 +236,7 @@
       <div class="chips stylechips" id="styles">
         <button class="chip util" id="style-all" type="button">✓ All</button>
         <button class="chip util" id="style-none" type="button">Clear</button>
+        <button class="chip ai-chip" id="ai-toggle" type="button" aria-pressed="false">✨ AI names</button>
         <button class="chip" data-style="real" aria-pressed="true">Real words</button>
         <button class="chip" data-style="two" aria-pressed="true">Two words</button>
         <button class="chip" data-style="compound" aria-pressed="false">Compound</button>
@@ -225,7 +249,7 @@
     </div>
 
     <div class="grid">
-      <div><label class="lab" for="maxlen">Max length</label><input id="maxlen" type="text" inputmode="numeric" value="15" /><p class="hint">Letters before the dot</p></div>
+      <div><label class="lab" for="maxlen">Max length</label><input id="maxlen" type="text" inputmode="numeric" value="12" /><p class="hint">Letters before the dot</p></div>
       <div><label class="lab" for="starts">Starts with</label><input id="starts" type="text" placeholder="letter or word" autocomplete="off" /></div>
       <div><label class="lab" for="ends">Ends with</label><input id="ends" type="text" placeholder="letter or word" autocomplete="off" /></div>
       <div><label class="lab" for="count">How many to find</label><input id="count" type="text" inputmode="numeric" value="30" /><p class="hint">Up to 600 · big numbers take longer</p></div>
@@ -277,17 +301,43 @@
         <path d="M3 9h12c0 2.5-1.6 4-4 4.4V15h2l-1.2 3H7.2L6 15h2v-1.6C5.5 13 3 12 3 9z"/><path d="M15 9l4-1.5V11"/>
       </svg>
       <div class="big">Pick your styles and forge.</div>
-      Mix any of the eleven name styles, score each result 0–100, and let Anvil<br>keep checking until it fills your count with open or for-sale domains.
+      Mix any of the eight name styles, score each result 0–100, and let Anvil<br>keep checking until it fills your count with open or for-sale domains.
     </div>
   </div>
 
   <div class="shortlist" id="shortlist" style="display:none">
     <h2>Shortlist</h2><div class="sl-items" id="sl-items"></div>
   </div>
+  </div><!-- /tab-find -->
+
+  <div id="tab-trends" hidden>
+    <section class="panel reveal d2">
+      <div class="trends-head">
+        <div>
+          <label class="lab" style="margin:0">Trending on Google right now</label>
+          <div class="hint" style="margin:5px 0 0">The top searches today. Tap any one to forge domains around it — great for spotting timely ideas.</div>
+        </div>
+        <div class="trends-controls">
+          <select id="trends-geo" class="mini-select" aria-label="Region">
+            <option value="US">United States</option>
+            <option value="GB">United Kingdom</option>
+            <option value="CA">Canada</option>
+            <option value="AU">Australia</option>
+            <option value="IN">India</option>
+            <option value="DE">Germany</option>
+            <option value="FR">France</option>
+          </select>
+          <button id="trends-refresh" class="chip util" type="button">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="trends-grid" class="trends-grid"><div class="trends-msg">Loading trends…</div></div>
+      <div class="hint" style="margin:14px 0 0">Trending searches are often news and events, not all of them make sense as a brand — scan for the products, niches, and topics worth a domain.</div>
+    </section>
+  </div>
 
   <footer id="how">
     <p><b>Name styles</b> (multi-select) decide what gets generated: <b>Real words</b> (single dictionary words), <b>Two words</b>, <b>Compound</b> (curated brandable word pairs), <b>Brandable</b> (invented, pronounceable), <b>Invented</b> (modern vowel-ending coinages), <b>Short &amp; punchy</b> (4–5 letters), and <b>Prefix</b> / <b>Suffix</b> patterns. Tick any combination; the pool is built from all of them, and names matching your keyword or its synonyms are ranked first.</p>
-    <p style="margin-top:10px"><b>The search</b> scores every name, then checks domains best-first against public DNS until it fills <b>How many to find</b> in the states ticked under <b>Find</b> — or runs out. Short real-word .coms are mostly registered, so for lots of open names lean on Brandable / Short / Misspelled, add <b>.io</b> or <b>.ai</b>, or allow longer names.</p>
+    <p style="margin-top:10px"><b>The search</b> scores every name, then checks domains best-first against public DNS until it fills <b>How many to find</b> in the states ticked under <b>Find</b> — or runs out. Short real-word .coms are mostly registered, so for lots of open names lean on Brandable / Invented / Short, add <b>.io</b> or <b>.ai</b>, or allow longer names.</p>
     <p style="margin-top:10px"><b>The value score</b> (0–100) is led by <b>length</b> and <b>word quality</b> — a short single real word scores far above a long coined string — then adjusted for extension, pronounceability, cleanliness (hyphens and numbers hurt), and a commercial-keyword boost (AI, crypto, health, lending). It rates brandability, not a guaranteed price. <b>Est. resale</b> is a separate rough dollar range estimated from those same traits, calibrated to real aftermarket patterns (3-letter .coms ~$10–50K, 4-letter ~$1–10K, one-word .coms much higher, gibberish under $100). It is an algorithm, not a live appraisal or a comp lookup — treat it as a ballpark and check NameBio for real comparable sales before pricing anything. <b>States:</b> <b>open</b> means unregistered — register it today at any registrar (confirmed with a second DNS lookup so it's trustworthy); <b>for sale</b> means parked at a marketplace, buyable at the owner's price; <b>taken</b> means registered and not listed; <b>unverified</b> means DNS was ambiguous (grouped with taken, off by default). Open and For sale are the ones you can buy. Confirm on <b>Namecheap</b> before paying.</p>
     <p style="margin-top:10px"><b>More buying options.</b> Open names link out to several registrars — Namecheap, Porkbun, Dynadot, GoDaddy — so you can cross-check availability and compare registration prices, since a name not showing on one sometimes shows on another. For-sale names get a tile listing the marketplaces they may be sold on (Sedo, Afternic, Dan, GoDaddy, Atom) in one place. Live asking prices can't be read in the browser (marketplaces block cross-site requests and there's no free price feed), so the tile links out to each listing; pulling real prices and merging duplicate listings needs those marketplaces' APIs through a backend.</p>
   </footer>
@@ -689,7 +739,7 @@ function priceTag(state, tld){
 let searching = false, hasSearched = false, forgeTimer = null;
 
 function selectedTlds(){ return [...document.querySelectorAll("#tlds .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.tld); }
-function selectedStyles(){ return new Set([...document.querySelectorAll("#styles .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.style)); }
+function selectedStyles(){ return new Set([...document.querySelectorAll("#styles .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.style).filter(Boolean)); }
 function ncUrl(d){ return "https://www.namecheap.com/domains/registration/results/?domain="+encodeURIComponent(d); }
 function marketUrl(d){ return "https://www.godaddy.com/domainsearch/find?domainToCheck="+encodeURIComponent(d); }
 const enc = encodeURIComponent;
@@ -736,7 +786,7 @@ function marketTileHTML(domain, provider){
 }
 function cardHTML(domain, sld, tld, parts, idx, v, state, provider){
   const star = starred.has(domain);
-  const reasons = v.reasons.slice(0,3).map(r=>`<span class="word-tag${r==='hot sector'?' hot':''}">${r}</span>`).join("");
+  const reasons = v.reasons.slice(0,3).map(r=>`<span class="word-tag${r==='hot sector'?' hot':''}${r==='AI pick'?' ai':''}">${r}</span>`).join("");
   const provTag = (state==="forsale" && provider)?`<span class="word-tag prov">parked · ${provider}</span>`:"";
   const tile = (state==="forsale")? marketTileHTML(domain, provider) : "";
   return `
@@ -794,7 +844,8 @@ async function confirmAvailable(matches){
   }catch(e){ /* no backend / error -> skip confirmation */ }
 }
 async function runSearch(){
-  if(!pool.length || searching) return;
+  if(searching) return;
+  if(!pool.length){ renderMatches([], 0); $("forge").disabled=false; return; }
   searching=true; $("forge").disabled=true;
   loadPrices();
   const want=wantCount(), minS=minScore();
@@ -802,7 +853,7 @@ async function runSearch(){
   const filtered = pool.filter(c=>c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
   const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
-  const CHUNK = 30, LANES = 5;   // run several batch requests at once for speed
+  const CHUNK = 30, LANES = 6;   // run several batch requests at once for speed
   const results=[]; let matchCount=0, next=0, checked=0, lastProg=0;
   async function lane(){
     while(matchCount<wantBuf && next<filtered.length && checked<MAXCHECK){
@@ -821,7 +872,8 @@ async function runSearch(){
   }
   await Promise.all(Array.from({length:LANES}, lane));
   let matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
-  await confirmAvailable(matches);                                   // registry double-check
+  renderMatches(matches.slice(0,want), checked);              // show results immediately…
+  await confirmAvailable(matches);                            // …then refine with the registry check
   matches = matches.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
   renderMatches(matches, checked);
   searching=false; $("forge").disabled=false;
@@ -839,32 +891,67 @@ function syncStars(){
     btn.classList.toggle("starred",on); btn.querySelector("svg").setAttribute("fill",on?"currentColor":"none");
   });
 }
+const aiOn = ()=> { const b=$("ai-toggle"); return !!b && b.getAttribute("aria-pressed")==="true"; };
+async function fetchAINames(seed, maxLen){
+  try{
+    const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),20000);
+    const r=await fetch("/api/check?ai=1&max="+maxLen+"&seed="+encodeURIComponent(seed),{headers:{accept:"application/json"},signal:ac.signal});
+    clearTimeout(t);
+    if(!r.ok){ toast("AI names unavailable right now"); return []; }
+    const j=await r.json();
+    if(j && j.error){ toast(j.error); return []; }
+    return (j && Array.isArray(j.names)) ? j.names : [];
+  }catch(e){ toast("AI request timed out"); return []; }
+}
 async function forge(){
   if(searching){ scheduleForge(); return; }
   const tlds=selectedTlds();
   if(tlds.length===0){ toast("Pick at least one ending (.com, .ai …)"); return; }
   const styles=selectedStyles();
-  if(styles.size===0){ toast("Pick at least one name style"); return; }
+  if(styles.size===0 && !aiOn()){ toast("Pick at least one name style (or turn on AI names)"); return; }
   hasSearched=true;
   poolTld=tlds[0]; poolOthers=tlds.slice(1);
   const seedRaw = $("seed").value || "";
   const tokens = seedRaw.toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
   const seedWords = expandKeyword(tokens);                  // keyword + curated synonyms
   const relList = seedWords.filter(w=>w.length>=3); const relSet = relList.length?relList:seedWords;
-  const raw=generateNames({ seed:seedRaw, seedWords, maxLen:$("maxlen").value, starts:$("starts").value, ends:$("ends").value, styles });
-  pool=raw.map(c=>{
+  const maxLen = Math.max(3,Math.min(40,parseInt($("maxlen").value,10)||12));
+  const starts=($("starts").value||"").toLowerCase().replace(/[^a-z]/g,""), ends=($("ends").value||"").toLowerCase().replace(/[^a-z]/g,"");
+
+  // optional AI-generated names (opt-in; backend needs ANTHROPIC_API_KEY)
+  let aiCands=[];
+  if(aiOn() && tokens.length){
+    host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Summoning AI names…</div><div id="prog">asking the model</div></div>`;
+    const names=await fetchAINames(seedRaw, maxLen);
+    const seen=new Set();
+    for(const n of names){
+      const sld=String(n).toLowerCase().replace(/[^a-z]/g,"");
+      if(sld.length<3 || sld.length>maxLen || seen.has(sld)) continue;
+      if(starts && !sld.startsWith(starts)) continue;
+      if(ends && !sld.endsWith(ends)) continue;
+      seen.add(sld); aiCands.push({sld, parts:[sld], ai:true});
+    }
+  }
+
+  const raw = styles.size ? generateNames({ seed:seedRaw, seedWords, maxLen, starts:$("starts").value, ends:$("ends").value, styles }) : [];
+  const seen2=new Set(aiCands.map(c=>c.sld));
+  const merged=[...aiCands];
+  for(const c of raw){ if(!seen2.has(c.sld)){ seen2.add(c.sld); merged.push(c); } }
+
+  pool=merged.map(c=>{
     const v=valueScore(c.sld, poolTld, c.parts, seedWords);
     v.resale=resaleValue(c.sld, poolTld, c.parts, seedWords);
-    const rel = relSet.some(t=>c.sld.includes(t)) ? 1 : 0;   // contains the keyword or a synonym?
-    if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
-    return { ...c, v, rel };
-  }).sort((a,b)=> (b.rel-a.rel) || (b.v.score-a.v.score));     // related names first, then by value
+    const rel = c.ai ? 1 : (relSet.some(t=>c.sld.includes(t)) ? 1 : 0);
+    if(c.ai) v.reasons=["AI pick", ...v.reasons.filter(r=>r!=="AI pick" && r!=="on-topic")];
+    else if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
+    return { ...c, v, rel, ai:!!c.ai };
+  }).sort((a,b)=> (b.rel-a.rel) || ((b.ai?1:0)-(a.ai?1:0)) || (b.v.score-a.v.score)); // AI + on-topic first
   await runSearch();
 }
 
 function scheduleForge(){
   if(!hasSearched) return;
-  if(selectedStyles().size===0 || selectedTlds().size===0) return;
+  if((selectedStyles().size===0 && !aiOn()) || selectedTlds().size===0) return;
   clearTimeout(forgeTimer);
   forgeTimer=setTimeout(()=>{ if(searching) scheduleForge(); else forge(); }, 350);
 }
@@ -878,10 +965,49 @@ document.querySelectorAll("#tlds .chip[data-tld], #styles .chip[data-style]").fo
 });
 $("style-all").addEventListener("click",()=>{ document.querySelectorAll("#styles .chip[data-style]").forEach(c=>c.setAttribute("aria-pressed","true")); scheduleForge(); });
 $("style-none").addEventListener("click",()=>{ document.querySelectorAll("#styles .chip[data-style]").forEach(c=>c.setAttribute("aria-pressed","false")); });
+$("ai-toggle").addEventListener("click",()=>{ const b=$("ai-toggle"); b.setAttribute("aria-pressed", b.getAttribute("aria-pressed")==="true"?"false":"true"); scheduleForge(); });
 ["f-open","f-sale","f-use"].forEach(id=>$(id).addEventListener("change", ()=>{ if(pool.length) runSearch(); }));
 $("minscore").addEventListener("input", updateSlider);
 $("minscore").addEventListener("change", ()=>{ if(pool.length) runSearch(); });
 updateSlider();
+/* ---------- tabs + trending ideas ---------- */
+function switchTab(which){
+  const find = which==="find";
+  $("tab-find").hidden = !find; $("tab-trends").hidden = find;
+  $("tab-btn-find").classList.toggle("active", find);
+  $("tab-btn-trends").classList.toggle("active", !find);
+  if(!find) loadTrends(false);
+}
+let trendsLoaded=false, trendsLoading=false;
+async function loadTrends(force){
+  if(trendsLoading || (trendsLoaded && !force)) return;
+  trendsLoading=true;
+  const grid=$("trends-grid"); grid.innerHTML='<div class="trends-msg">Loading trends…</div>';
+  const geo=$("trends-geo").value||"US";
+  try{
+    const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),9000);
+    const r=await fetch("/api/check?trends=1&geo="+encodeURIComponent(geo),{headers:{accept:"application/json"},signal:ac.signal});
+    clearTimeout(t);
+    const j=r.ok?await r.json():null;
+    const items=(j&&Array.isArray(j.trends))?j.trends:[];
+    if(!items.length){ grid.innerHTML='<div class="trends-msg">Couldn\u2019t load trends right now. Tap Refresh or try another region.</div>'; trendsLoaded=false; trendsLoading=false; return; }
+    grid.innerHTML=items.slice(0,20).map((it,i)=>{
+      const term=String(it.title||"").replace(/[<>]/g,"").replace(/"/g,"&quot;");
+      const traf=it.traffic?`<span class="tr-traf">${String(it.traffic).replace(/[<>"]/g,"")}</span>`:"";
+      return `<button class="trend-card" data-term="${term}" type="button"><span class="tr-rank">${i+1}</span><span class="tr-term">${term}</span>${traf}</button>`;
+    }).join("");
+    grid.querySelectorAll(".trend-card").forEach(b=>b.addEventListener("click",()=>{
+      $("seed").value=b.dataset.term; switchTab("find"); $("forge").click();
+    }));
+    trendsLoaded=true;
+  }catch(e){ grid.innerHTML='<div class="trends-msg">Couldn\u2019t load trends right now. Tap Refresh.</div>'; }
+  trendsLoading=false;
+}
+$("tab-btn-find").addEventListener("click",()=>switchTab("find"));
+$("tab-btn-trends").addEventListener("click",()=>switchTab("trends"));
+$("trends-refresh").addEventListener("click",()=>loadTrends(true));
+$("trends-geo").addEventListener("change",()=>loadTrends(true));
+
 loadPrices();
 requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add("lit")));
 </script>
