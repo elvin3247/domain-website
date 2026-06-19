@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anvil — real-word domain finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#0e1016; --bg-1:#161a24; --bg-2:#1d2230; --bg-3:#232a3a;
+    --line:#2a3142; --line-2:#3a4356;
+    --ink:#eef1f8; --muted:#9aa4ba; --faint:#6b7589;
+    --hot-1:#ffc24b; --hot-2:#ff8a3d; --hot-3:#ff5d7e;
+    --go:#36e29b;    --go-bg:rgba(54,226,155,.13);  --go-ln:rgba(54,226,155,.55);
+    --sale:#5db8ff;  --sale-bg:rgba(93,184,255,.14); --sale-ln:rgba(93,184,255,.6);
+    --stop:#ff7d88;  --stop-bg:rgba(255,125,136,.12);
+    --warn:#f6c64f;  --warn-bg:rgba(246,198,79,.12);
+    --molten:linear-gradient(100deg,#ffc24b 0%,#ff8a3d 45%,#ff5d7e 100%);
+    --display:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --body:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg-0)}
+  body{color:var(--ink);font-family:var(--body);line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;position:relative;overflow-x:hidden}
+  #glow{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(60% 45% at 50% 8%, rgba(255,138,61,.18), rgba(255,93,126,.07) 38%, transparent 70%),radial-gradient(80% 60% at 50% 120%, rgba(255,160,60,.10), transparent 60%);animation:breathe 7s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.7}50%{opacity:1}}
+  #embers{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .vignette{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 30%, transparent 55%, rgba(8,9,13,.55) 100%)}
+  .wrap{max-width:1000px;margin:0 auto;padding:34px 20px 80px;position:relative;z-index:2}
+  .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
+  body.lit .reveal{opacity:1;transform:none}
+  .reveal.d1{transition-delay:.05s}.reveal.d2{transition-delay:.14s}.reveal.d3{transition-delay:.23s}.reveal.d4{transition-delay:.32s}
+
+  header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:26px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .mark{width:42px;height:42px;flex:none;border-radius:11px;position:relative;background:var(--bg-2);border:1px solid var(--line-2);overflow:hidden}
+  .mark::after{content:"";position:absolute;inset:0;background:var(--molten);opacity:0;transition:opacity 1.1s ease}
+  body.lit .mark::after{opacity:.95}
+  .mark::before{content:"";position:absolute;inset:11px;border:2.5px solid var(--bg-0);border-radius:3px;transform:rotate(45deg);z-index:2}
+  .mark .core{position:absolute;inset:18px;background:#fff7e8;border-radius:2px;transform:rotate(45deg);z-index:3;box-shadow:0 0 10px 2px rgba(255,236,190,.8);opacity:0;transition:opacity 1.1s ease .2s}
+  body.lit .mark .core{opacity:.9}
+  h1{font-family:var(--display);font-size:30px;letter-spacing:-.02em;margin:0;font-weight:700;background:var(--molten);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{color:var(--muted);font-size:14.5px;margin:3px 0 0}
+
+  .panel{background:linear-gradient(180deg,var(--bg-1),#13161f);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 22px 50px rgba(0,0,0,.45);padding:20px}
+  .seedrow{display:flex;gap:11px;align-items:stretch;flex-wrap:wrap}
+  .seedrow .field{flex:1 1 300px}
+  label.lab{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 7px 2px;font-weight:500}
+  input[type=text]{width:100%;font-family:var(--body);font-size:15px;color:var(--ink);background:var(--bg-2);border:1px solid var(--line-2);border-radius:11px;padding:12px 14px;outline:none;transition:border-color .15s,box-shadow .15s}
+  input[type=text]:focus{border-color:var(--hot-2);box-shadow:0 0 0 3px rgba(255,138,61,.18)}
+  input::placeholder{color:var(--faint)}
+  .forge{position:relative;font-family:var(--display);font-weight:600;font-size:15.5px;letter-spacing:.01em;color:#241200;border:none;border-radius:12px;padding:0 26px;cursor:pointer;background:var(--molten);display:inline-flex;align-items:center;gap:9px;align-self:stretch;min-height:48px;white-space:nowrap;box-shadow:0 6px 22px rgba(255,122,61,.35);transition:transform .12s, box-shadow .2s;overflow:hidden}
+  .forge:hover{box-shadow:0 8px 30px rgba(255,122,61,.5)}
+  .forge:active{transform:translateY(1px) scale(.99)}
+  .forge:disabled{opacity:.6;cursor:default}
+  .forge .hammer{display:inline-block;transition:transform .15s}
+  .forge:hover .hammer{transform:rotate(-18deg) translateY(-1px)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-top:18px}
+  .hint{font-size:12px;color:var(--faint);margin:6px 2px 0}
+  .rowflex{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:13px;border:1px solid var(--line-2);background:var(--bg-2);color:var(--muted);border-radius:999px;padding:6px 13px;cursor:pointer;user-select:none;transition:.13s}
+  .chip:hover{color:var(--ink)}
+  .chip[aria-pressed=true]{color:#fff;border-color:transparent;background:var(--molten);box-shadow:0 4px 14px rgba(255,122,61,.3)}
+  .stylechips{flex:1 1 auto}
+  .stylechips .chip{font-family:var(--body);font-size:13px}
+  .stylechips .chip[aria-pressed=true]{background:rgba(255,170,80,.14);border-color:var(--hot-2);color:var(--hot-1);box-shadow:none}
+  .sliderrow{margin-top:18px}
+  .slider{-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;background:var(--line-2);flex:1 1 200px;max-width:340px;outline:none;cursor:pointer}
+  .slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#ff8a3d;cursor:pointer;box-shadow:0 2px 8px rgba(255,122,61,.5);border:2px solid #14161f}
+  .slider::-moz-range-thumb{width:16px;height:16px;border:2px solid #14161f;border-radius:50%;background:#ff8a3d;cursor:pointer}
+  .slider:focus-visible{box-shadow:0 0 0 3px rgba(255,138,61,.25)}
+  .slidernum{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--hot-1);min-width:26px;text-align:right}
+  .filterbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+  .ck{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:13.5px;color:var(--muted);border:1px solid var(--line-2);background:var(--bg-2);border-radius:10px;padding:8px 13px;transition:.13s}
+  .ck:hover{color:var(--ink)}
+  .ck input{position:absolute;opacity:0;width:0;height:0}
+  .ck .bx{width:17px;height:17px;border-radius:5px;border:1.5px solid var(--line-2);position:relative;flex:none;transition:.13s}
+  .ck .bx::after{content:"";position:absolute;left:4.5px;top:1px;width:5px;height:9px;border:2px solid #0e1016;border-top:0;border-left:0;transform:rotate(45deg) scale(0);transition:transform .13s}
+  .ck .swatch{width:9px;height:9px;border-radius:50%;flex:none}
+  .ck.open .swatch{background:var(--go)} .ck.sale .swatch{background:var(--sale)} .ck.use .swatch{background:var(--stop)}
+  .ck input:checked + .bx{border-color:transparent}
+  .ck.open input:checked + .bx{background:var(--go)} .ck.sale input:checked + .bx{background:var(--sale)} .ck.use input:checked + .bx{background:var(--stop)}
+  .ck input:checked + .bx::after{transform:rotate(45deg) scale(1)}
+  .ck input:checked ~ span:last-child{color:var(--ink)}
+  .ck input:focus-visible + .bx{box-shadow:0 0 0 3px rgba(255,138,61,.3)}
+
+  .statusbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:30px 2px 14px;flex-wrap:wrap}
+  .statusbar .count{font-family:var(--display);font-size:15.5px;font-weight:600;color:var(--ink)}
+  .statusbar .count .hl{background:var(--molten);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .statusbar .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:12px;color:var(--muted);font-family:var(--mono)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  .dot.a{background:var(--go);box-shadow:0 0 8px var(--go)} .dot.s{background:var(--sale);box-shadow:0 0 8px var(--sale)}
+  .dot.t{background:var(--stop)} .dot.u{background:var(--warn)}
+  .notice{font-size:13.5px;color:var(--muted);background:rgba(255,255,255,.02);border:1px dashed var(--line-2);border-radius:12px;padding:13px 15px;margin:6px 2px 0}
+  .notice b{color:var(--ink);font-weight:600}
+  .loader{text-align:center;padding:52px 20px;color:var(--muted)}
+  .loader .ring{width:34px;height:34px;border-radius:50%;border:3px solid var(--line-2);border-top-color:var(--hot-2);margin:0 auto 16px;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loader .big{font-family:var(--display);font-size:16px;color:var(--ink);font-weight:600}
+
+  .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:14px;margin-top:16px}
+  .card{position:relative;background:linear-gradient(180deg,var(--bg-2),#191e2a);border:1px solid var(--line);border-radius:14px;padding:15px 16px 14px;display:flex;flex-direction:column;gap:11px;overflow:hidden;opacity:0;transform:translateY(10px) scale(.985);animation:drop .42s cubic-bezier(.2,.75,.25,1) forwards}
+  @keyframes drop{to{opacity:1;transform:none}}
+  .card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--line-2)}
+  .card.is-available::before{background:var(--go);box-shadow:0 0 14px var(--go-ln)}
+  .card.is-forsale::before{background:var(--sale);box-shadow:0 0 14px var(--sale-ln)}
+  .card.is-taken::before{background:var(--line-2)}
+  .card.is-unknown::before{background:var(--warn)}
+  .card.is-taken{opacity:.7}
+  .card:hover{border-color:var(--line-2);box-shadow:0 14px 34px rgba(0,0,0,.4)}
+  .cardhead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .dname{font-family:var(--mono);font-size:16.5px;font-weight:500;letter-spacing:-.01em;word-break:break-all;flex:1}
+  .dname .sld{color:var(--ink)} .dname .tld{color:var(--faint)}
+  .vscore{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:48px;padding:5px 8px;border-radius:10px;border:1px solid var(--line-2);line-height:1;flex:none}
+  .vscore b{font-family:var(--display);font-size:17px;font-weight:700}
+  .vscore span{font-family:var(--mono);font-size:8px;letter-spacing:.16em;text-transform:uppercase;opacity:.75;margin-top:3px}
+  .vscore[data-tier=premium]{background:var(--molten);border-color:transparent;color:#241200}
+  .vscore[data-tier=strong]{background:rgba(255,170,80,.15);border-color:var(--hot-2);color:var(--hot-1)}
+  .vscore[data-tier=fair]{color:var(--muted)}
+  .vscore[data-tier=basic]{color:var(--faint)}
+  .meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .word-tag{font-size:10.5px;color:var(--muted);border:1px solid var(--line-2);border-radius:5px;padding:1px 6px}
+  .word-tag.hot{color:var(--hot-1);border-color:var(--hot-2)}
+  .word-tag.style{color:var(--muted);border-color:var(--line-2);text-transform:lowercase}
+  .word-tag.prov{color:var(--sale);border-color:var(--sale-ln)}
+  .pill{font-family:var(--mono);font-size:11.5px;font-weight:500;border-radius:999px;padding:4px 10px;display:inline-flex;align-items:center;gap:7px;width:fit-content}
+  .pill.available{background:var(--go-bg);color:var(--go)}
+  .pill.forsale{background:var(--sale-bg);color:var(--sale)}
+  .pill.taken{background:var(--stop-bg);color:var(--stop)}
+  .pill.unknown{background:var(--warn-bg);color:var(--warn)}
+  .cardfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
+  .links{display:flex;gap:7px}
+  .actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .iconbtn{border:1px solid var(--line-2);background:var(--bg-3);border-radius:9px;width:32px;height:32px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);padding:0;transition:.13s}
+  .iconbtn:hover{color:var(--ink);border-color:var(--hot-2)}
+  .iconbtn.starred{color:#1b1205;border-color:transparent;background:var(--molten)}
+  .iconbtn svg{width:15px;height:15px;display:block}
+  .nclink{font-family:var(--display);font-size:12.5px;font-weight:600;text-decoration:none;color:var(--ink);background:var(--bg-3);border:1px solid var(--line-2);border-radius:9px;padding:8px 12px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:.13s}
+  .nclink:hover{border-color:var(--hot-2);color:#fff;box-shadow:0 0 16px rgba(255,138,61,.2)}
+  .nclink svg{width:11px;height:11px}
+  .nclink.market{border-color:var(--sale-ln);color:var(--sale)}
+  .nclink.market:hover{box-shadow:0 0 16px var(--sale-bg);color:#cfe9ff}
+  .stylechips .chip.util{font-family:var(--mono);font-size:11.5px;color:var(--faint);background:transparent;border-style:dashed}
+  .stylechips .chip.util:hover{color:var(--ink);border-color:var(--hot-2)}
+  .sources{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .src{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line-2);border-radius:7px;padding:4px 8px;text-decoration:none;transition:.12s;white-space:nowrap}
+  .src:hover{color:var(--ink);border-color:var(--hot-2)}
+  .src.primary{color:var(--hot-1);border-color:var(--hot-2)}
+  .market-tile{background:rgba(93,184,255,.06);border:1px solid var(--sale-ln);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:8px}
+  .mt-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .mt-where{font-size:12.5px;color:var(--ink)} .mt-where b{color:var(--sale)}
+  .mt-price{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+  .mt-links{display:flex;gap:6px;flex-wrap:wrap}
+  .mt-links a{font-family:var(--mono);font-size:11px;color:var(--sale);border:1px solid var(--sale-ln);border-radius:7px;padding:3px 8px;text-decoration:none;transition:.12s}
+  .mt-links a:hover{background:var(--sale-bg);color:#cfe9ff}
+
+  .empty{text-align:center;color:var(--muted);padding:54px 20px}
+  .empty .anvil{width:54px;height:54px;margin:0 auto 16px;opacity:.8}
+  .empty .big{font-family:var(--display);font-size:19px;color:var(--ink);font-weight:600;margin-bottom:7px}
+  .shortlist{margin-top:34px}
+  .shortlist h2{font-family:var(--display);font-size:14px;letter-spacing:.02em;margin:0 0 11px 2px;color:var(--ink)}
+  .sl-items{display:flex;gap:9px;flex-wrap:wrap}
+  .sl-pill{font-family:var(--mono);font-size:13px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:999px;padding:7px 13px;display:inline-flex;align-items:center;gap:9px}
+  .sl-pill a{color:var(--ink);text-decoration:none} .sl-pill a:hover{color:var(--hot-1)}
+  .sl-pill .sc{color:var(--hot-1);font-weight:600}
+  .sl-pill button{border:none;background:none;color:var(--faint);cursor:pointer;font-size:16px;line-height:1;padding:0}
+  .sl-pill button:hover{color:var(--stop)}
+  footer{margin-top:46px;color:var(--faint);font-size:12.5px;line-height:1.65}
+  footer b{color:var(--muted)}
+  footer code{font-family:var(--mono);background:var(--bg-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11.5px;color:var(--muted)}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:var(--bg-3);color:var(--ink);font-size:13px;padding:10px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;font-family:var(--body);z-index:60;border:1px solid var(--line-2)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (max-width:560px){.wrap{padding:24px 14px 64px}h1{font-size:25px}.seedrow .forge{flex:1 1 100%}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}#glow{opacity:.85}.card{opacity:1;transform:none}.loader .ring{animation:spin 1s linear infinite!important}}
+</style>
+</head>
+<body>
+<div id="glow"></div>
+<canvas id="embers"></canvas>
+<div class="vignette"></div>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><span class="core"></span></div>
+      <div>
+        <h1 class="reveal d1">Anvil</h1>
+        <p class="tag reveal d1">Forge domains in any style, score their value, and keep searching until your list is full.</p>
+      </div>
+    </div>
+  </header>
+
+  <section class="panel reveal d2">
+    <div class="seedrow">
+      <div class="field">
+        <label class="lab" for="seed">Keyword or business idea</label>
+        <input id="seed" type="text" placeholder="e.g. coffee roastery, ai notes, garden tools" autocomplete="off" />
+      </div>
+      <button id="forge" class="forge"><span class="hammer">⚒</span> Forge domains</button>
+    </div>
+
+    <div class="rowflex" style="align-items:flex-start">
+      <label class="lab" style="margin:7px 0 0">Name styles</label>
+      <div class="chips stylechips" id="styles">
+        <button class="chip util" id="style-all" type="button">✓ All</button>
+        <button class="chip util" id="style-none" type="button">Clear</button>
+        <button class="chip" data-style="real" aria-pressed="true">Real words</button>
+        <button class="chip" data-style="two" aria-pressed="true">Two words</button>
+        <button class="chip" data-style="brand" aria-pressed="true">Brandable</button>
+        <button class="chip" data-style="miss" aria-pressed="false">Misspelled</button>
+        <button class="chip" data-style="prefix" aria-pressed="false">Prefix (get / go / try)</button>
+        <button class="chip" data-style="suffix" aria-pressed="false">Suffix (-ly / -ify)</button>
+        <button class="chip" data-style="blend" aria-pressed="false">Blend</button>
+        <button class="chip" data-style="allit" aria-pressed="false">Alliterative</button>
+        <button class="chip" data-style="short" aria-pressed="false">Short &amp; punchy</button>
+        <button class="chip" data-style="roots" aria-pressed="false">Classic roots</button>
+        <button class="chip" data-style="nature" aria-pressed="false">Nature &amp; animals</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div><label class="lab" for="maxlen">Max length</label><input id="maxlen" type="text" inputmode="numeric" value="15" /><p class="hint">Letters before the dot</p></div>
+      <div><label class="lab" for="starts">Starts with</label><input id="starts" type="text" placeholder="letter or word" autocomplete="off" /></div>
+      <div><label class="lab" for="ends">Ends with</label><input id="ends" type="text" placeholder="letter or word" autocomplete="off" /></div>
+      <div><label class="lab" for="count">How many to find</label><input id="count" type="text" inputmode="numeric" value="30" /><p class="hint">Up to 600 · big numbers take longer</p></div>
+    </div>
+
+    <div class="rowflex sliderrow">
+      <label class="lab" for="minscore" style="margin:0">Min value score</label>
+      <input type="range" id="minscore" class="slider" min="0" max="100" value="0" step="1" />
+      <span class="slidernum" id="minscore-num">0</span>
+      <span class="hint" style="margin:0">Skip names scoring below this</span>
+    </div>
+
+    <div class="rowflex">
+      <label class="lab" style="margin:0">Endings</label>
+      <div class="chips" id="tlds">
+        <button class="chip" data-tld=".com" aria-pressed="true">.com</button>
+        <button class="chip" data-tld=".ai" aria-pressed="false">.ai</button>
+        <button class="chip" data-tld=".io" aria-pressed="false">.io</button>
+        <button class="chip" data-tld=".co" aria-pressed="false">.co</button>
+        <button class="chip" data-tld=".net" aria-pressed="false">.net</button>
+        <button class="chip" data-tld=".org" aria-pressed="false">.org</button>
+        <button class="chip" data-tld=".app" aria-pressed="false">.app</button>
+        <button class="chip" data-tld=".dev" aria-pressed="false">.dev</button>
+      </div>
+    </div>
+
+    <div class="filterbar">
+      <label class="lab" style="margin:0">Find</label>
+      <label class="ck open"><input type="checkbox" id="f-open" checked /><span class="bx"></span><span class="swatch"></span><span>Open — buy today</span></label>
+      <label class="ck sale"><input type="checkbox" id="f-sale" checked /><span class="bx"></span><span class="swatch"></span><span>For sale / auction</span></label>
+      <label class="ck use"><input type="checkbox" id="f-use" /><span class="bx"></span><span class="swatch"></span><span>Taken / unverified</span></label>
+      <span class="hint" style="margin:0;flex-basis:100%">Open = unregistered, register it now at any registrar. For sale = buy on a marketplace. Taken = registered and not listed.</span>
+    </div>
+  </section>
+
+  <div class="statusbar reveal d3">
+    <span class="count" id="count-label">Ready to forge</span>
+    <span class="legend">
+      <span><span class="dot a"></span>open</span>
+      <span><span class="dot s"></span>for sale</span>
+      <span><span class="dot t"></span>taken</span>
+      <span><span class="dot u"></span>unverified</span>
+    </span>
+  </div>
+
+  <div id="results-host" class="reveal d4">
+    <div class="empty" id="empty">
+      <svg class="anvil" viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.6" stroke-linejoin="round">
+        <path d="M3 9h12c0 2.5-1.6 4-4 4.4V15h2l-1.2 3H7.2L6 15h2v-1.6C5.5 13 3 12 3 9z"/><path d="M15 9l4-1.5V11"/>
+      </svg>
+      <div class="big">Pick your styles and forge.</div>
+      Mix any of the eleven name styles, score each result 0–100, and let Anvil<br>keep checking until it fills your count with open or for-sale domains.
+    </div>
+  </div>
+
+  <div class="shortlist" id="shortlist" style="display:none">
+    <h2>Shortlist</h2><div class="sl-items" id="sl-items"></div>
+  </div>
+
+  <footer id="how">
+    <p><b>Name styles</b> (multi-select) decide what gets generated: <b>Real words</b> (single dictionary words), <b>Two words</b>, <b>Brandable</b> (invented, pronounceable), <b>Misspelled</b> (Flickr / Lyte-style respellings), <b>Prefix</b> and <b>Suffix</b> patterns, <b>Blend</b> (portmanteaus), <b>Alliterative</b> pairs, <b>Short &amp; punchy</b> (4–5 letters), <b>Classic roots</b> (Latin / Greek), and <b>Nature &amp; animals</b>. Tick any combination; the pool is built from all of them.</p>
+    <p style="margin-top:10px"><b>The search</b> scores every name, then checks domains best-first against public DNS until it fills <b>How many to find</b> in the states ticked under <b>Find</b> — or runs out. Short real-word .coms are mostly registered, so for lots of open names lean on Brandable / Short / Misspelled, add <b>.io</b> or <b>.ai</b>, or allow longer names.</p>
+    <p style="margin-top:10px"><b>The value score</b> weighs length, ending, word quality, pronounceability, cleanliness, and a trend boost (AI, crypto, health, energy, lending). It estimates appeal, not a guaranteed price. <b>States:</b> <b>open</b> means unregistered — register it today at any registrar (confirmed with a second DNS lookup so it's trustworthy); <b>for sale</b> means parked at a marketplace, buyable at the owner's price; <b>taken</b> means registered and not listed; <b>unverified</b> means DNS was ambiguous (grouped with taken, off by default). Open and For sale are the ones you can buy. Confirm on <b>Namecheap</b> before paying.</p>
+    <p style="margin-top:10px"><b>More buying options.</b> Open names link out to several registrars — Namecheap, Porkbun, Dynadot, GoDaddy — so you can cross-check availability and compare registration prices, since a name not showing on one sometimes shows on another. For-sale names get a tile listing the marketplaces they may be sold on (Sedo, Afternic, Dan, GoDaddy, Atom) in one place. Live asking prices can't be read in the browser (marketplaces block cross-site requests and there's no free price feed), so the tile links out to each listing; pulling real prices and merging duplicate listings needs those marketplaces' APIs through a backend.</p>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Word data ---------- */
+const ADJ = "swift bright prime bold clear sharp smart fresh pure rapid solid true vital brave calm keen neat sleek agile lucid noble grand royal urban rustic golden silver cosmic lunar solar polar alpine coastal modern classic simple gentle mighty humble honest clever nimble steady sturdy vivid warm cool quiet quick deep wide open free easy ready eager daily early sound sweet wild loyal lively merry crisp lush brisk".split(" ");
+const NOUN = "peak spark nest hub lab forge grove harbor atlas beacon anchor summit river stone oak fox bear owl comet orbit pixel loop core edge flow wave pulse drift north compass lantern ember willow cedar maple meadow canyon ridge delta bay cove reef coral pearl amber jade ivory copper cobalt slate flint quartz prism vertex helm sail mast port dock bridge tower gate vault garden orchard field trail path route journey voyage quest mission signal current circuit engine gear anvil hammer loom thread fabric weave mosaic palette canvas studio gallery archive ledger almanac scroll quill falcon hawk raven heron otter lynx stag finch wren lark swan acorn".split(" ");
+const VERB = "build grow boost launch scale shift climb reach soar glide ignite kindle gather render shape craft mend tend guide steer".split(" ");
+const SUFFIX = "hub lab works spot zone base point place room shop store market space studio group house yard dock port way craft force link line list kit box bay deck desk bench board card note book page post mail".split(" ");
+const COMMON = "coffee tea garden plant flower kitchen food drink bake brew roast bean cup health fitness body mind sleep music sound audio video photo image picture design art paint draw code data cloud byte web app site page money finance bank pay cash coin fund trade buy sell shop deal market price travel trip tour map road bike car ride drive fly home house room desk work team play game learn teach study read write story word book note mail send save spend earn dog cat pet bird fish farm fresh green clean wash care heal grow plant seed leaf tree wood stone metal iron steel paper craft hand build fix tool box kit gear wheel light lamp fire water earth air sky star moon sun rain snow wind storm cloud forest river lake ocean beach mountain trail dream focus boost spark glow shine".split(" ");
+const DICT = new Set([...ADJ,...NOUN,...VERB,...SUFFIX,...COMMON]);
+
+const NATURE = "fox owl bear falcon hawk raven heron otter lynx stag finch wren lark swan oak cedar maple willow river grove meadow canyon ridge reef coral summit peak north delta bay cove pine fern moss leaf stone creek harbor birch aspen sparrow robin ember willow".split(" ");
+const ROOTS = "nova lumen vita astra aero aqua terra volt helio luna cipher apex flux aura onyx zenith quanta nimbus stella cosmo photon arden lyra vega orion solis nexus vivo credo altus magna clara prima fortis lucent novus aeon veridia kairos".split(" ");
+const BRAND_PRE = "get go try my use join the we on up run do ask hey with".split(" ");
+const BRAND_SUF = "ly ify io ai app hub labs hq ster fy zy sy oo ora ix able".split(" ");
+const MISSPELLABLE = "coffee care clean cloud comet classic bright light quick spark photos quartz copper cobalt studio creative color favor center cyber crystal cool cream crisp craft circuit picture music camera cookie clever pickle ticket rocket basket simple".split(" ");
+const CON = "b d f g k l m n p r s t v z".split(" ");
+const ONSET = "b br d dr f fl g gr k kl l m n p pr r s sl sp st t tr v z ph th sk sn cr ch".split(" ");
+const VOW = "a e i o u ai ia eo io ou ae y".split(" ");
+const CODA = ["","","","n","r","x","l","s","m","ro","na","li","va","mo","do","ko","ta","vo"];
+
+const TREND = {
+  ai:1,agent:1,agents:1,gpt:1,llm:1,bot:.9,copilot:1,prompt:.9,neural:.9,model:.8,compute:.8,gpu:.9,robot:.9,auto:.7,vision:.8,voice:.8,
+  crypto:1,token:.9,chain:.8,coin:.9,defi:.9,wallet:.9,stake:.7,yield:.7,
+  pay:.9,bank:.9,finance:.9,fund:.8,invest:.8,capital:.8,credit:.8,loan:.9,insure:.9,insurance:1,tax:.7,
+  cloud:.8,data:.8,quantum:.9,cyber:.8,
+  health:.8,care:.7,bio:.7,gene:.8,med:.7,clinic:.7,therapy:.7,fit:.6,sleep:.6,longevity:.9,
+  solar:.7,energy:.7,carbon:.7,climate:.7,battery:.7,grid:.6,electric:.6,
+  shop:.6,store:.6,market:.6,deal:.5,studio:.5,labs:.6,hub:.5,app:.6
+};
+const PARKING = [
+  {k:"sedoparking",n:"Sedo"},{k:"sedo.com",n:"Sedo"},{k:"parkingcrew",n:"ParkingCrew"},
+  {k:"dan.com",n:"Dan"},{k:"undeveloped.com",n:"Dan"},{k:"afternic",n:"Afternic"},
+  {k:"bodis.com",n:"Bodis"},{k:"above.com",n:"Above"},{k:"uniregistry",n:"Uniregistry"},
+  {k:"hugedomains",n:"HugeDomains"},{k:"fabulous.com",n:"Fabulous"},{k:"cashparking",n:"GoDaddy"},
+  {k:"parklogic",n:"ParkLogic"},{k:"smartname",n:"SmartName"},{k:"voodoo.com",n:"DropCatch"},
+  {k:"sav.com",n:"Sav"},{k:"domainmarket",n:"DomainMarket"},{k:"brandbucket",n:"BrandBucket"},
+  {k:"snparking",n:"SnapNames"},{k:"name-services.com",n:"parking"}
+];
+
+/* ---------- helpers ---------- */
+function sanitizeWord(s){ return (s||"").toLowerCase().replace(/[^a-z]/g,""); }
+const rp = arr => arr[(Math.random()*arr.length)|0];
+function coinName(syl){ let s=""; for(let i=0;i<syl;i++){ s+= rp(ONSET)+rp(VOW); } s+= rp(CODA); return s.replace(/[^a-z]/g,""); }
+function coinShort(){ const v="aeiouy".split(""); const len=Math.random()<.5?4:5; let s=""; for(let i=0;i<len;i++){ s+= (i%2===0)? rp(CON) : rp(v); } return s; }
+function respell(w){
+  const out=new Set(); let x;
+  x=w.replace(/^c(?=[aoulr])/,'k'); if(x!==w) out.add(x);
+  x=w.replace(/c(?=[aou])/g,'k'); if(x!==w) out.add(x);
+  x=w.replace(/ck/g,'k'); if(x!==w) out.add(x);
+  x=w.replace(/ght/g,'te'); if(x!==w) out.add(x);
+  x=w.replace(/ph/g,'f'); if(x!==w) out.add(x);
+  x=w.replace(/ee/g,'e'); if(x!==w) out.add(x);
+  x=w.replace(/s$/,'z'); if(x!==w) out.add(x);
+  x=w.replace(/er$/,'r'); if(x!==w && x.length>=3) out.add(x);
+  if(w.length>5){ x=w.replace(/[aeiou]$/,''); if(x!==w) out.add(x); }
+  return [...out].filter(s=>s.length>=3 && s!==w);
+}
+function blend(a,b){
+  if(!a||!b||a===b) return "";
+  const h=a.slice(0, Math.max(2, Math.ceil(a.length*0.55)));
+  const t=b.slice(Math.floor(b.length*0.45));
+  let s=(h+t).replace(/(.)\1{2,}/g,'$1$1');
+  return s.length>=4 && s.length<=14 ? s : "";
+}
+
+/* ---------- generation by style ---------- */
+function buildCandidates(seed, styles){
+  const out=[]; const seen=new Set();
+  const push=(sld,parts)=>{ if(sld && sld.length>=3 && !seen.has(sld)){ seen.add(sld); out.push({sld,parts}); } };
+  const has=s=>styles.has(s);
+
+  if(has("real")){
+    for(const w of new Set([...ADJ,...NOUN,...VERB,...COMMON])) push(w,[w]);
+    if(seed) push(seed,[seed]);
+  }
+  if(has("two")){
+    for(let i=0;i<420;i++){ const a=rp(ADJ),n=rp(NOUN); push(a+n,[a,n]); }
+    for(let i=0;i<340;i++){ const n1=rp(NOUN),n2=rp(NOUN); if(n1!==n2) push(n1+n2,[n1,n2]); }
+    for(let i=0;i<220;i++){ const v=rp(VERB),n=rp(NOUN); push(v+n,[v,n]); }
+    for(let i=0;i<220;i++){ const a=rp(ADJ),c=rp(COMMON); push(a+c,[a,c]); }
+    if(seed){
+      const partners=[...new Set([...NOUN,...ADJ,...VERB,...COMMON,...SUFFIX,...NATURE])];
+      for(const w of partners){ if(w!==seed){ push(seed+w,[seed,w]); push(w+seed,[w,seed]); } }
+    }
+  }
+  if(has("allit")){
+    const pool=[...ADJ,...NOUN,...VERB]; const byL={};
+    for(const w of pool){ (byL[w[0]]=byL[w[0]]||[]).push(w); }
+    for(let i=0;i<300;i++){ const arr=byL[rp(Object.keys(byL))]; if(!arr||arr.length<2) continue; const a=rp(arr),b=rp(arr); if(a!==b) push(a+b,[a,b]); }
+    if(seed){ const arr=byL[seed[0]]||[]; for(const w of arr) push(seed+w,[seed,w]); }
+  }
+  if(has("nature")){
+    for(const w of NATURE){ push(w,[w]); for(let k=0;k<2;k++) push(w+rp(SUFFIX),[w,rp(SUFFIX)]); }
+    for(let i=0;i<180;i++){ const a=rp(NATURE),b=rp(NOUN); if(a!==b) push(a+b,[a,b]); }
+    if(seed){ for(const w of NATURE){ push(w+seed,[w,seed]); push(seed+w,[seed,w]); } }
+  }
+  if(has("prefix")){
+    const bases = seed ? [seed,...NOUN,...ADJ] : [...NOUN,...ADJ];
+    for(const p of BRAND_PRE){ for(let i=0;i<14;i++){ const b=rp(bases); const parts=(DICT.has(p)&&(DICT.has(b)||b===seed))?[p,b]:["·"]; push(p+b,parts); } }
+  }
+  if(has("suffix")){
+    const bases = seed ? [seed,...NOUN,...ADJ] : [...NOUN,...ADJ];
+    for(const s of BRAND_SUF){ for(let i=0;i<16;i++){ push(rp(bases)+s,["·"]); } }
+  }
+  if(has("brand")){ for(let i=0;i<600;i++) push(coinName(2+((Math.random()*2)|0)),["·"]); }
+  if(has("short")){ for(let i=0;i<500;i++) push(coinShort(),["·"]); }
+  if(has("miss")){
+    const base = seed ? [seed,...MISSPELLABLE] : MISSPELLABLE;
+    for(const w of base){ for(const t of respell(w)) push(t,["·"]); }
+  }
+  if(has("blend")){
+    for(let i=0;i<320;i++){ const b=blend(seed||rp(NOUN), rp(NOUN)); if(b) push(b,["·"]); }
+    if(seed){ for(let i=0;i<140;i++){ const b=blend(seed, rp([...NOUN,...ADJ])); if(b) push(b,["·"]); } }
+  }
+  if(has("roots")){
+    for(const r of ROOTS){ push(r,["·"]); for(let k=0;k<2;k++) push(r+rp(NOUN),["·"]); if(seed){ push(r+seed,["·"]); push(seed+r,["·"]); } }
+    for(let i=0;i<160;i++){ const r1=rp(ROOTS),r2=rp(ROOTS); if(r1!==r2) push(r1+r2,["·"]); }
+  }
+  return out;
+}
+function generateNames(opts){
+  const seed=sanitizeWord(opts.seed);
+  const maxLen=Math.max(3,Math.min(40,parseInt(opts.maxLen,10)||15));
+  const starts=sanitizeWord(opts.starts), ends=sanitizeWord(opts.ends);
+  const styles=opts.styles;
+  let cands=buildCandidates(seed,styles); const passed=[];
+  for(const c of cands){
+    if(c.sld.length>maxLen) continue;
+    if(starts && !c.sld.startsWith(starts)) continue;
+    if(ends && !c.sld.endsWith(ends)) continue;
+    passed.push({sld:c.sld, parts:c.parts.filter(p=>p!=="·")});
+    if(passed.length>=5000) break;
+  }
+  return passed;
+}
+
+/* ---------- value score 0..100 ---------- */
+const TLD_VAL = {".com":16,".ai":15,".io":12,".co":10,".app":8,".dev":7,".net":6,".org":5};
+function valueScore(sld, tld, parts, seed){
+  const reasons=[]; let s=0; const L=sld.length;
+  let lp; if(L<=3)lp=30;else if(L===4)lp=28;else if(L===5)lp=25;else if(L===6)lp=22;else if(L===7)lp=18;
+  else if(L===8)lp=15;else if(L===9)lp=12;else if(L===10)lp=9;else if(L<=12)lp=6;else if(L<=15)lp=3;else lp=1;
+  s+=lp; if(L<=6) reasons.push("short"); else if(L>=14) reasons.push("long");
+  const realParts = parts.filter(p=>DICT.has(p));
+  if(parts.length===1 && DICT.has(parts[0])){ s+=18; reasons.push("dictionary word"); }
+  else if(parts.length===2 && realParts.length===2){ s+=12; reasons.push("two real words"); }
+  else if(realParts.length>=1){ s+=8; }
+  else { s+=4; reasons.push("coined"); }
+  const tp = (TLD_VAL[tld]!=null)?TLD_VAL[tld]:4; s+=tp;
+  if(tld===".com") reasons.push(".com"); else if(tld===".ai"||tld===".io") reasons.push(tld.slice(1)+" premium");
+  const vowels=(sld.match(/[aeiou]/g)||[]).length, ratio=vowels/Math.max(1,L); let pp=0;
+  if(ratio>=0.30 && ratio<=0.55) pp+=8; else if(ratio>=0.22 && ratio<=0.62) pp+=5; else pp+=1;
+  const clusters=(sld.match(/[bcdfghjklmnpqrstvwxz]{3,}/g)||[]).length;
+  if(clusters===0) pp+=4; else pp-=clusters*3;
+  const syl=(sld.match(/[aeiouy]+/g)||[]).length; if(syl>=2 && syl<=3) pp+=2;
+  pp=Math.max(0,Math.min(14,pp)); s+=pp;
+  if(pp>=12) reasons.push("easy to say"); if(clusters>0) reasons.push("hard cluster");
+  let cp=6; if(/-/.test(sld)){cp-=4;reasons.push("hyphen");} if(/[0-9]/.test(sld)){cp-=4;reasons.push("number");} s+=Math.max(0,cp);
+  let tw=0; const checkSet=[...parts]; if(seed) checkSet.push(seed);
+  for(const p of checkSet){ if(TREND[p]!=null && TREND[p]>tw) tw=TREND[p]; }
+  if(tw>0){ s+=Math.round(tw*12); reasons.push("hot sector"); }
+  const score=Math.max(0,Math.min(100,Math.round(s)));
+  const tier = score>=78?"premium": score>=62?"strong": score>=48?"fair":"basic";
+  return {score, tier, reasons};
+}
+
+/* ---------- availability ---------- */
+async function doh(domain, type){
+  const r = await fetch("https://dns.google/resolve?name="+encodeURIComponent(domain)+"&type="+type,{headers:{"accept":"application/json"}});
+  if(!r.ok) throw new Error("doh"); return r.json();
+}
+let backendMode = "auto"; // auto: try /api/check, then fall back to browser DNS; dns: DNS only
+async function checkAvailability(domain){
+  if(backendMode !== "dns"){
+    try{
+      const r = await fetch("/api/check?domain="+encodeURIComponent(domain), {headers:{"accept":"application/json"}});
+      if(r.ok){ const j = await r.json(); if(j && j.state) return j; }
+      throw new Error("no backend");
+    }catch(e){ backendMode = "dns"; }   // no backend deployed -> use browser DNS for the rest of this session
+  }
+  return checkViaDNS(domain);
+}
+async function checkViaDNS(domain){
+  try{
+    const j = await doh(domain,"NS");
+    if(j.Status === 3) return {state:"available"};                 // NXDOMAIN = unregistered, buy today
+    if(j.Status === 0){
+      const hosts = [].concat((j.Answer||[]).filter(a=>a.type===2).map(a=>a.data||""))
+                      .concat((j.Authority||[]).filter(a=>a.type===2).map(a=>a.data||"")).map(h=>h.toLowerCase());
+      if(hosts.length){
+        for(const p of PARKING){ if(hosts.some(h=>h.includes(p.k))) return {state:"forsale", provider:p.n}; }
+        return {state:"taken"};
+      }
+      // no nameservers in the NS answer — confirm with SOA before trusting "open"
+      const s = await doh(domain,"SOA");
+      if(s.Status === 3) return {state:"available"};
+      if(s.Status === 0 && s.Answer && s.Answer.some(a=>a.type===6)) return {state:"taken"};
+      return {state:"unknown"};
+    }
+    return {state:"unknown"};
+  }catch(e){ return {state:"unknown"}; }
+}
+
+/* ---------- ember background ---------- */
+(function embers(){
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; if(reduce) return;
+  const cv=document.getElementById("embers"), ctx=cv.getContext("2d");
+  let w,h,dpr,parts=[],burstUntil=0,burstX=0,burstY=0; const COLORS=["#ffc24b","#ff8a3d","#ff6b6b","#ffd98a"];
+  function resize(){ dpr=Math.min(window.devicePixelRatio||1,2); w=cv.width=innerWidth*dpr; h=cv.height=innerHeight*dpr; cv.style.width=innerWidth+"px"; cv.style.height=innerHeight+"px"; }
+  resize(); addEventListener("resize", resize);
+  function ambient(){ return {x:Math.random()*w,y:h+10*dpr,vx:(Math.random()-.5)*.25*dpr,vy:-(.25+Math.random()*.55)*dpr,r:(.7+Math.random()*1.7)*dpr,life:1,decay:.0016+Math.random()*.0022,c:COLORS[(Math.random()*COLORS.length)|0],b:false}; }
+  function burstP(x,y){ const a=Math.random()*Math.PI*2, sp=(.6+Math.random()*2.4)*dpr; return {x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1*dpr,r:(.8+Math.random()*1.8)*dpr,life:1,decay:.012+Math.random()*.02,c:COLORS[(Math.random()*COLORS.length)|0],b:true}; }
+  window.__forgeBurst=function(cx,cy){ burstX=cx*dpr; burstY=cy*dpr; burstUntil=performance.now()+260; for(let i=0;i<26;i++) parts.push(burstP(burstX,burstY)); };
+  function frame(now){
+    ctx.clearRect(0,0,w,h);
+    if(parts.filter(p=>!p.b).length<46 && Math.random()<.7) parts.push(ambient());
+    if(now<burstUntil && Math.random()<.6) parts.push(burstP(burstX,burstY));
+    ctx.globalCompositeOperation="lighter";
+    for(let i=parts.length-1;i>=0;i--){
+      const p=parts[i]; p.x+=p.vx; p.y+=p.vy; if(!p.b) p.vy*=.999; else p.vy+=.03*dpr; p.life-=p.decay;
+      if(p.life<=0 || p.y< -20*dpr){ parts.splice(i,1); continue; }
+      const a=p.b? p.life : Math.sin(p.life*Math.PI)*.6;
+      ctx.beginPath(); ctx.fillStyle=p.c; ctx.globalAlpha=Math.max(0,a); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();
+    }
+    ctx.globalAlpha=1; ctx.globalCompositeOperation="source-over";
+    if(!document.hidden) requestAnimationFrame(frame); else setTimeout(()=>requestAnimationFrame(frame),400);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ---------- DOM + search ---------- */
+const $ = id => document.getElementById(id);
+const host = $("results-host");
+const starred = new Map();
+let pool = [], poolTld = ".com", poolOthers = [];
+const availCache = new Map();
+let searching = false, hasSearched = false, forgeTimer = null;
+
+function selectedTlds(){ return [...document.querySelectorAll("#tlds .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.tld); }
+function selectedStyles(){ return new Set([...document.querySelectorAll("#styles .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.style)); }
+function ncUrl(d){ return "https://www.namecheap.com/domains/registration/results/?domain="+encodeURIComponent(d); }
+function marketUrl(d){ return "https://www.godaddy.com/domainsearch/find?domainToCheck="+encodeURIComponent(d); }
+const enc = encodeURIComponent;
+const REGISTRARS = [
+  {n:"Namecheap", u:d=>"https://www.namecheap.com/domains/registration/results/?domain="+enc(d)},
+  {n:"Porkbun",   u:d=>"https://porkbun.com/checkout/search?q="+enc(d)},
+  {n:"Dynadot",   u:d=>"https://www.dynadot.com/domain/search?domain="+enc(d)},
+  {n:"GoDaddy",   u:d=>"https://www.godaddy.com/domainsearch/find?domainToCheck="+enc(d)}
+];
+const MARKETS = [
+  {n:"Sedo",     u:d=>"https://sedo.com/search/?keyword="+enc(d)},
+  {n:"Afternic", u:d=>"https://www.afternic.com/forsale/"+enc(d)},
+  {n:"Dan",      u:d=>"https://dan.com/buy-domain/"+enc(d)},
+  {n:"GoDaddy",  u:d=>"https://www.godaddy.com/domainsearch/find?domainToCheck="+enc(d)},
+  {n:"Atom",     u:d=>"https://www.atom.com/search?keyword="+enc(d)}
+];
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1600); }
+function minScore(){ return parseInt($("minscore").value,10)||0; }
+function wantCount(){ return Math.max(1,Math.min(600,parseInt($("count").value,10)||30)); }
+function updateSlider(){ const v=minScore(); $("minscore-num").textContent=v; $("minscore").style.background=`linear-gradient(to right, #ff8a3d 0%, #ffc24b ${v}%, var(--line-2) ${v}%, var(--line-2) 100%)`; }
+function stateShown(state){
+  if(state==="available") return $("f-open").checked;
+  if(state==="forsale") return $("f-sale").checked;
+  if(state==="taken"||state==="unknown") return $("f-use").checked;
+  return true;
+}
+function pillHTML(state){
+  if(state==="available") return '<span class="pill available">● open</span>';
+  if(state==="forsale") return '<span class="pill forsale">● for sale</span>';
+  if(state==="taken") return '<span class="pill taken">● in use</span>';
+  return '<span class="pill unknown">● unverified</span>';
+}
+function sourcesHTML(domain, state){
+  if(state==="forsale") return "";
+  return `<div class="sources">`+ REGISTRARS.map((r,i)=>`<a class="src${i===0?' primary':''}" href="${r.u(domain)}" target="_blank" rel="noopener">${r.n}</a>`).join("") + `</div>`;
+}
+function marketTileHTML(domain, provider){
+  const where = provider ? `Listed at <b>${provider}</b>` : `On the aftermarket`;
+  const links = MARKETS.map(m=>`<a href="${m.u(domain)}" target="_blank" rel="noopener">${m.n}</a>`).join("");
+  return `<div class="market-tile">
+      <div class="mt-row"><span class="mt-where">${where}</span><span class="mt-price">price on listing →</span></div>
+      <div class="mt-links">${links}</div>
+    </div>`;
+}
+function cardHTML(domain, sld, tld, parts, idx, v, state, provider){
+  const star = starred.has(domain);
+  const reasons = v.reasons.slice(0,3).map(r=>`<span class="word-tag${r==='hot sector'?' hot':''}">${r}</span>`).join("");
+  const provTag = (state==="forsale" && provider)?`<span class="word-tag prov">parked · ${provider}</span>`:"";
+  const tile = (state==="forsale")? marketTileHTML(domain, provider) : "";
+  return `
+  <div class="card is-${state}" data-domain="${domain}" data-score="${v.score}" style="animation-delay:${Math.min(idx*24,520)}ms">
+    <div class="cardhead">
+      <div class="dname"><span class="sld">${sld}</span><span class="tld">${tld}</span></div>
+      <div class="vscore" data-tier="${v.tier}"><b>${v.score}</b><span>value</span></div>
+    </div>
+    <div class="meta">${sld.length} chars ${reasons} ${provTag}</div>
+    <div class="avail">${pillHTML(state)}</div>
+    ${tile}
+    <div class="cardfoot">
+      <div class="links">
+        <button class="iconbtn copy" title="Copy domain" aria-label="Copy domain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        <button class="iconbtn star ${star?'starred':''}" title="Save to shortlist" aria-label="Save to shortlist"><svg viewBox="0 0 24 24" fill="${star?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17.8 6.4 20.3l1.2-6.2L3 9.8l6.3-.8z"/></svg></button>
+      </div>
+      ${sourcesHTML(domain, state)}
+    </div>
+  </div>`;
+}
+function renderMatches(matches, evaluated){
+  if(matches.length===0){
+    host.innerHTML=`<div class="empty"><div class="big">Nothing matched in this pool.</div>Lower the min value score, add more name styles or endings (.io / .ai), or allow longer names.</div>`;
+    $("count-label").textContent=`0 found · ${evaluated} checked`; return;
+  }
+  let open=0,sale=0,unk=0,use=0;
+  for(const m of matches){ if(m.state==="available")open++; else if(m.state==="forsale")sale++; else if(m.state==="taken")use++; else unk++; }
+  host.innerHTML=`<div class="notice">Best-first, checked the <b>${poolTld}</b> version of each name. ${poolOthers.length?`Other endings (${poolOthers.join(", ")}) get verify links.`:""}</div>
+    <div class="results">${ matches.map((m,i)=>cardHTML(m.c.sld+poolTld, m.c.sld, poolTld, m.c.parts, i, m.c.v, m.state, m.provider)).join("") }</div>`;
+  const bits=[]; if(open)bits.push(`${open} open`); if(sale)bits.push(`${sale} for sale`); if(use)bits.push(`${use} taken`); if(unk)bits.push(`${unk} unverified`);
+  $("count-label").innerHTML=`<span class="hl">${matches.length}</span> found · ${bits.join(" · ")} · ${evaluated} checked`;
+  host.querySelectorAll(".card").forEach(card=>{
+    const d=card.dataset.domain, sc=card.dataset.score;
+    card.querySelector(".copy").onclick=async ()=>{ try{ await navigator.clipboard.writeText(d); toast("Copied "+d); }catch(e){ toast("Copy not available here"); } };
+    card.querySelector(".star").onclick=()=>{ if(starred.has(d)) starred.delete(d); else starred.set(d, sc); syncStars(); renderShortlist(); };
+  });
+}
+async function runSearch(){
+  if(!pool.length || searching) return;
+  searching=true; $("forge").disabled=true;
+  const want=wantCount(), minS=minScore();
+  const filtered = pool.filter(c=>c.v.score>=minS);
+  host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
+  const results=[]; let matchCount=0, next=0, newChecks=0, lastProg=0;
+  const MAXCHECK = Math.min(filtered.length, Math.max(120, want*3), 900);
+  async function worker(){
+    while(true){
+      if(matchCount>=want) return;
+      if(next>=filtered.length || newChecks>=MAXCHECK) return;
+      const i=next++; const c=filtered[i]; const dom=c.sld+poolTld;
+      let r;
+      if(availCache.has(dom)) r=availCache.get(dom);
+      else { r=await checkAvailability(dom); availCache.set(dom,r); newChecks++; }
+      results.push({c, state:r.state, provider:r.provider, idx:i});
+      if(stateShown(r.state)) matchCount++;
+      const now=performance.now(); if(now-lastProg>120){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${matchCount} · checked ${newChecks}`; }
+    }
+  }
+  await Promise.all(Array.from({length:12}, worker));
+  const matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
+  renderMatches(matches, newChecks);
+  searching=false; $("forge").disabled=false;
+}
+function renderShortlist(){
+  const wrap=$("shortlist"), items=$("sl-items");
+  if(starred.size===0){ wrap.style.display="none"; return; }
+  wrap.style.display="block";
+  items.innerHTML=[...starred.entries()].map(([d,sc])=>`<span class="sl-pill"><span class="sc">${sc}</span><a href="${ncUrl(d)}" target="_blank" rel="noopener">${d}</a><button data-rm="${d}" aria-label="Remove ${d}">×</button></span>`).join("");
+  items.querySelectorAll("[data-rm]").forEach(b=>{ b.onclick=()=>{ starred.delete(b.dataset.rm); syncStars(); renderShortlist(); }; });
+}
+function syncStars(){
+  document.querySelectorAll(".card").forEach(card=>{
+    const d=card.dataset.domain, btn=card.querySelector(".star"), on=starred.has(d);
+    btn.classList.toggle("starred",on); btn.querySelector("svg").setAttribute("fill",on?"currentColor":"none");
+  });
+}
+async function forge(){
+  if(searching){ scheduleForge(); return; }
+  const tlds=selectedTlds();
+  if(tlds.length===0){ toast("Pick at least one ending (.com, .ai …)"); return; }
+  const styles=selectedStyles();
+  if(styles.size===0){ toast("Pick at least one name style"); return; }
+  hasSearched=true;
+  poolTld=tlds[0]; poolOthers=tlds.slice(1);
+  const seed=sanitizeWord($("seed").value);
+  const raw=generateNames({ seed:$("seed").value, maxLen:$("maxlen").value, starts:$("starts").value, ends:$("ends").value, styles });
+  pool=raw.map(c=>({ ...c, v:valueScore(c.sld, poolTld, c.parts, seed) })).sort((a,b)=>b.v.score-a.v.score);
+  await runSearch();
+}
+
+function scheduleForge(){
+  if(!hasSearched) return;
+  if(selectedStyles().size===0 || selectedTlds().size===0) return;
+  clearTimeout(forgeTimer);
+  forgeTimer=setTimeout(()=>{ if(searching) scheduleForge(); else forge(); }, 350);
+}
+
+/* events */
+$("forge").addEventListener("click",(e)=>{ const r=e.currentTarget.getBoundingClientRect(); if(window.__forgeBurst) window.__forgeBurst(r.left+r.width/2, r.top+r.height/2); forge(); });
+$("seed").addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); });
+["starts","ends","maxlen","count"].forEach(id=>$(id).addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); }));
+document.querySelectorAll("#tlds .chip[data-tld], #styles .chip[data-style]").forEach(chip=>{
+  chip.addEventListener("click",()=>{ chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed")==="true"?"false":"true"); scheduleForge(); });
+});
+$("style-all").addEventListener("click",()=>{ document.querySelectorAll("#styles .chip[data-style]").forEach(c=>c.setAttribute("aria-pressed","true")); scheduleForge(); });
+$("style-none").addEventListener("click",()=>{ document.querySelectorAll("#styles .chip[data-style]").forEach(c=>c.setAttribute("aria-pressed","false")); });
+["f-open","f-sale","f-use"].forEach(id=>$(id).addEventListener("change", ()=>{ if(pool.length) runSearch(); }));
+$("minscore").addEventListener("input", updateSlider);
+$("minscore").addEventListener("change", ()=>{ if(pool.length) runSearch(); });
+updateSlider();
+requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add("lit")));
+</script>
+</body>
+</html>
