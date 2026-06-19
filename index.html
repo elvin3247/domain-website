@@ -637,19 +637,17 @@ function renderMatches(matches, evaluated){
 // display are confirmed, so it stays well under RDAP rate limits.
 async function confirmAvailable(matches){
   const avail = matches.filter(m=>m.state==="available");
-  if(!avail.length) return 0;
+  if(!avail.length) return;
   const pe=$("prog"); if(pe) pe.textContent="confirming open results…";
-  let downgraded=0;
-  for(let i=0;i<avail.length;i+=24){
-    const slice = avail.slice(i,i+24);
-    try{
+  const chunks=[]; for(let i=0;i<avail.length;i+=30) chunks.push(avail.slice(i,i+30));
+  try{
+    await Promise.all(chunks.map(async slice=>{
       const r = await fetch("/api/check?confirm=1&domains="+encodeURIComponent(slice.map(m=>m.c.sld+poolTld).join(",")), {headers:{accept:"application/json"}});
-      if(!r.ok) return downgraded;
-      const j = await r.json(); if(!j || !Array.isArray(j.results)) return downgraded;
-      slice.forEach((m,k)=>{ const st=j.results[k]; if(st && st.state && st.state!=="available"){ m.state=st.state; m.provider=st.provider; availCache.set(m.c.sld+poolTld, st); downgraded++; } });
-    }catch(e){ return downgraded; }   // no backend / error -> skip confirmation
-  }
-  return downgraded;
+      if(!r.ok) return;
+      const j = await r.json(); if(!j || !Array.isArray(j.results)) return;
+      slice.forEach((m,k)=>{ const st=j.results[k]; if(st && st.state && st.state!=="available"){ m.state=st.state; m.provider=st.provider; availCache.set(m.c.sld+poolTld, st); } });
+    }));
+  }catch(e){ /* no backend / error -> skip confirmation */ }
 }
 async function runSearch(){
   if(!pool.length || searching) return;
@@ -659,19 +657,24 @@ async function runSearch(){
   const filtered = pool.filter(c=>c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
   const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
-  const CHUNK = 24;
-  const results=[]; let matchCount=0, idx=0, checked=0, lastProg=0;
-  while(idx<filtered.length && matchCount<wantBuf && checked<MAXCHECK){
-    const slice = filtered.slice(idx, idx+CHUNK); const base=idx; idx+=slice.length;
-    const states = await checkBatch(slice.map(c=>c.sld+poolTld));
-    for(let k=0;k<slice.length;k++){
-      const st = states[k] || {state:"unknown"};
-      results.push({c:slice[k], state:st.state, provider:st.provider, idx:base+k});
-      if(stateShown(st.state)) matchCount++;
+  const CHUNK = 30, LANES = 5;   // run several batch requests at once for speed
+  const results=[]; let matchCount=0, next=0, checked=0, lastProg=0;
+  async function lane(){
+    while(matchCount<wantBuf && next<filtered.length && checked<MAXCHECK){
+      const start=next; next+=CHUNK;                       // claim a chunk (synchronous, no overlap between lanes)
+      const slice=filtered.slice(start, start+CHUNK);
+      if(!slice.length) break;
+      const states = await checkBatch(slice.map(c=>c.sld+poolTld));
+      for(let k=0;k<slice.length;k++){
+        const st = states[k] || {state:"unknown"};
+        results.push({c:slice[k], state:st.state, provider:st.provider, idx:start+k});
+        if(stateShown(st.state)) matchCount++;
+      }
+      checked += slice.length;
+      const now=performance.now(); if(now-lastProg>100){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${Math.min(matchCount,want)} · checked ${checked}`; }
     }
-    checked += slice.length;
-    const now=performance.now(); if(now-lastProg>100){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${matchCount} · checked ${checked}`; }
   }
+  await Promise.all(Array.from({length:LANES}, lane));
   let matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
   await confirmAvailable(matches);                                   // registry double-check
   matches = matches.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
