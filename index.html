@@ -306,6 +306,8 @@ const NATURE = "fox owl bear falcon hawk raven heron otter lynx stag finch wren 
 const ROOTS = "nova lumen vita astra aero aqua terra volt helio luna cipher apex flux aura onyx zenith quanta nimbus stella cosmo photon arden lyra vega orion solis nexus vivo credo altus magna clara prima fortis lucent novus aeon veridia kairos".split(" ");
 const BRAND_PRE = "get go try my use join the we on up run do ask hey with".split(" ");
 const BRAND_SUF = "ly ify io ai app hub labs hq ster fy zy sy oo ora ix able".split(" ");
+// business / brandable words that pair well after almost any keyword (workout+hub, class+pass)
+const BIZ = "hub lab labs works studio club spot zone app hq pro base kit space center group collective method plan flow crew squad pass daily now go co academy coach training program session room circle league guild loop nest deck desk works".split(" ");
 const MISSPELLABLE = "coffee care clean cloud comet classic bright light quick spark photos quartz copper cobalt studio creative color favor center cyber crystal cool cream crisp craft circuit picture music camera cookie clever pickle ticket rocket basket simple".split(" ");
 const CON = "b d f g k l m n p r s t v z".split(" ");
 const ONSET = "b br d dr f fl g gr k kl l m n p pr r s sl sp st t tr v z ph th sk sn cr ch".split(" ");
@@ -358,66 +360,78 @@ function blend(a,b){
 }
 
 /* ---------- generation by style ---------- */
-function buildCandidates(seed, styles){
+// tokens = keyword split into words, e.g. "workout class" -> ["workout","class"]
+function buildCandidates(tokens, styles){
   const out=[]; const seen=new Set();
   const push=(sld,parts)=>{ if(sld && sld.length>=3 && !seen.has(sld)){ seen.add(sld); out.push({sld,parts}); } };
   const has=s=>styles.has(s);
 
+  // ===== keyword-relevant names — always built when a keyword is present =====
+  // These are what make results on-topic. They get ranked first in forge().
+  if(tokens.length){
+    const seeds = [...new Set([...tokens, tokens.join("")].filter(t=>t.length>=3 && t.length<=18))];
+    const adjSub = ["daily","fresh","pure","free","easy","ready","bold","smart","prime","swift","bright","true","vital","brave","quick","modern","simple"];
+    for(const t of seeds){
+      push(t,[t]);                                          // bare keyword
+      for(const b of BIZ) push(t+b,[t,b]);                  // workout+hub, class+pass
+      for(const p of BRAND_PRE) push(p+t,[p,t]);            // get+workout, join+class
+      for(const s of BRAND_SUF) push(t+s,[t,s]);            // workout+ly, class+ify
+      for(const a of adjSub) push(a+t,[a,t]);               // daily+workout, fresh+class
+      for(const n of NOUN.slice(0,40)) push(t+n,[t,n]);     // workout+peak, class+forge
+    }
+    for(let i=0;i<tokens.length;i++) for(let j=0;j<tokens.length;j++){
+      if(i!==j) push(tokens[i]+tokens[j],[tokens[i],tokens[j]]); // workout+class, class+workout
+    }
+  }
+
+  // ===== generic style names — variety + fill when keyword names run out =====
   if(has("real")){
     for(const w of new Set([...ADJ,...NOUN,...VERB,...COMMON])) push(w,[w]);
-    if(seed) push(seed,[seed]);
   }
   if(has("two")){
     for(let i=0;i<420;i++){ const a=rp(ADJ),n=rp(NOUN); push(a+n,[a,n]); }
     for(let i=0;i<340;i++){ const n1=rp(NOUN),n2=rp(NOUN); if(n1!==n2) push(n1+n2,[n1,n2]); }
     for(let i=0;i<220;i++){ const v=rp(VERB),n=rp(NOUN); push(v+n,[v,n]); }
     for(let i=0;i<220;i++){ const a=rp(ADJ),c=rp(COMMON); push(a+c,[a,c]); }
-    if(seed){
-      const partners=[...new Set([...NOUN,...ADJ,...VERB,...COMMON,...SUFFIX,...NATURE])];
-      for(const w of partners){ if(w!==seed){ push(seed+w,[seed,w]); push(w+seed,[w,seed]); } }
-    }
   }
   if(has("allit")){
     const pool=[...ADJ,...NOUN,...VERB]; const byL={};
     for(const w of pool){ (byL[w[0]]=byL[w[0]]||[]).push(w); }
     for(let i=0;i<300;i++){ const arr=byL[rp(Object.keys(byL))]; if(!arr||arr.length<2) continue; const a=rp(arr),b=rp(arr); if(a!==b) push(a+b,[a,b]); }
-    if(seed){ const arr=byL[seed[0]]||[]; for(const w of arr) push(seed+w,[seed,w]); }
   }
   if(has("nature")){
     for(const w of NATURE){ push(w,[w]); for(let k=0;k<2;k++) push(w+rp(SUFFIX),[w,rp(SUFFIX)]); }
     for(let i=0;i<180;i++){ const a=rp(NATURE),b=rp(NOUN); if(a!==b) push(a+b,[a,b]); }
-    if(seed){ for(const w of NATURE){ push(w+seed,[w,seed]); push(seed+w,[seed,w]); } }
   }
   if(has("prefix")){
-    const bases = seed ? [seed,...NOUN,...ADJ] : [...NOUN,...ADJ];
-    for(const p of BRAND_PRE){ for(let i=0;i<14;i++){ const b=rp(bases); const parts=(DICT.has(p)&&(DICT.has(b)||b===seed))?[p,b]:["·"]; push(p+b,parts); } }
+    const bases=[...NOUN,...ADJ];
+    for(const p of BRAND_PRE){ for(let i=0;i<14;i++){ const b=rp(bases); push(p+b, DICT.has(p)&&DICT.has(b)?[p,b]:["·"]); } }
   }
   if(has("suffix")){
-    const bases = seed ? [seed,...NOUN,...ADJ] : [...NOUN,...ADJ];
+    const bases=[...NOUN,...ADJ];
     for(const s of BRAND_SUF){ for(let i=0;i<16;i++){ push(rp(bases)+s,["·"]); } }
   }
   if(has("brand")){ for(let i=0;i<600;i++) push(coinName(2+((Math.random()*2)|0)),["·"]); }
   if(has("short")){ for(let i=0;i<500;i++) push(coinShort(),["·"]); }
   if(has("miss")){
-    const base = seed ? [seed,...MISSPELLABLE] : MISSPELLABLE;
-    for(const w of base){ for(const t of respell(w)) push(t,["·"]); }
+    for(const w of MISSPELLABLE){ for(const t of respell(w)) push(t,["·"]); }
   }
   if(has("blend")){
-    for(let i=0;i<320;i++){ const b=blend(seed||rp(NOUN), rp(NOUN)); if(b) push(b,["·"]); }
-    if(seed){ for(let i=0;i<140;i++){ const b=blend(seed, rp([...NOUN,...ADJ])); if(b) push(b,["·"]); } }
+    for(let i=0;i<320;i++){ const b=blend(rp(NOUN), rp(NOUN)); if(b) push(b,["·"]); }
+    if(tokens.length){ for(const t of tokens){ for(let i=0;i<80;i++){ const b=blend(t, rp([...NOUN,...ADJ])); if(b) push(b,[t]); } } } // blend keyword in too
   }
   if(has("roots")){
-    for(const r of ROOTS){ push(r,["·"]); for(let k=0;k<2;k++) push(r+rp(NOUN),["·"]); if(seed){ push(r+seed,["·"]); push(seed+r,["·"]); } }
+    for(const r of ROOTS){ push(r,["·"]); for(let k=0;k<2;k++) push(r+rp(NOUN),["·"]); }
     for(let i=0;i<160;i++){ const r1=rp(ROOTS),r2=rp(ROOTS); if(r1!==r2) push(r1+r2,["·"]); }
   }
   return out;
 }
 function generateNames(opts){
-  const seed=sanitizeWord(opts.seed);
+  const tokens=(opts.seed||"").toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
   const maxLen=Math.max(3,Math.min(40,parseInt(opts.maxLen,10)||15));
   const starts=sanitizeWord(opts.starts), ends=sanitizeWord(opts.ends);
   const styles=opts.styles;
-  let cands=buildCandidates(seed,styles); const passed=[];
+  let cands=buildCandidates(tokens,styles); const passed=[];
   for(const c of cands){
     if(c.sld.length>maxLen) continue;
     if(starts && !c.sld.startsWith(starts)) continue;
@@ -430,7 +444,7 @@ function generateNames(opts){
 
 /* ---------- value score 0..100 ---------- */
 const TLD_VAL = {".com":16,".ai":15,".io":12,".co":10,".app":8,".dev":7,".net":6,".org":5};
-function valueScore(sld, tld, parts, seed){
+function valueScore(sld, tld, parts, tokens){
   const reasons=[]; let s=0; const L=sld.length;
   let lp; if(L<=3)lp=30;else if(L===4)lp=28;else if(L===5)lp=25;else if(L===6)lp=22;else if(L===7)lp=18;
   else if(L===8)lp=15;else if(L===9)lp=12;else if(L===10)lp=9;else if(L<=12)lp=6;else if(L<=15)lp=3;else lp=1;
@@ -450,7 +464,7 @@ function valueScore(sld, tld, parts, seed){
   pp=Math.max(0,Math.min(14,pp)); s+=pp;
   if(pp>=12) reasons.push("easy to say"); if(clusters>0) reasons.push("hard cluster");
   let cp=6; if(/-/.test(sld)){cp-=4;reasons.push("hyphen");} if(/[0-9]/.test(sld)){cp-=4;reasons.push("number");} s+=Math.max(0,cp);
-  let tw=0; const checkSet=[...parts]; if(seed) checkSet.push(seed);
+  let tw=0; const checkSet=[...parts]; if(tokens&&tokens.length) for(const t of tokens) checkSet.push(t);
   for(const p of checkSet){ if(TREND[p]!=null && TREND[p]>tw) tw=TREND[p]; }
   if(tw>0){ s+=Math.round(tw*12); reasons.push("hot sector"); }
   const score=Math.max(0,Math.min(100,Math.round(s)));
@@ -702,9 +716,16 @@ async function forge(){
   if(styles.size===0){ toast("Pick at least one name style"); return; }
   hasSearched=true;
   poolTld=tlds[0]; poolOthers=tlds.slice(1);
-  const seed=sanitizeWord($("seed").value);
-  const raw=generateNames({ seed:$("seed").value, maxLen:$("maxlen").value, starts:$("starts").value, ends:$("ends").value, styles });
-  pool=raw.map(c=>({ ...c, v:valueScore(c.sld, poolTld, c.parts, seed) })).sort((a,b)=>b.v.score-a.v.score);
+  const seedRaw = $("seed").value || "";
+  const tokens = seedRaw.toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
+  const relList = tokens.filter(t=>t.length>=3); const relSet = relList.length?relList:tokens;
+  const raw=generateNames({ seed:seedRaw, maxLen:$("maxlen").value, starts:$("starts").value, ends:$("ends").value, styles });
+  pool=raw.map(c=>{
+    const v=valueScore(c.sld, poolTld, c.parts, tokens);
+    const rel = relSet.some(t=>c.sld.includes(t)) ? 1 : 0;   // does the name contain the keyword?
+    if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
+    return { ...c, v, rel };
+  }).sort((a,b)=> (b.rel-a.rel) || (b.v.score-a.v.score));     // keyword names first, then by value
   await runSearch();
 }
 
