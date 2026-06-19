@@ -480,6 +480,10 @@ async function checkBatch(domains){
         if(!res) throw new Error("no backend");
       }catch(e){ backendMode = "dns"; }   // no backend (e.g. opened as a local file) -> browser DNS
     }
+    if(res){
+      // backend up but returning nothing usable (e.g. old/broken deploy) -> use browser DNS
+      if(res.length>=8 && res.every(x=>!x || x.state==="unknown")){ backendMode="dns"; res=null; }
+    }
     if(!res){ res = await Promise.all(need.map(d=>checkViaDNS(d))); }
     need.forEach((d,k)=>{ const st=(res[k] && res[k].state)? res[k] : {state:"unknown"}; availCache.set(d,st); out[needIdx[k]]=st; });
   }
@@ -633,7 +637,7 @@ async function runSearch(){
   const want=wantCount(), minS=minScore();
   const filtered = pool.filter(c=>c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
-  const MAXCHECK = Math.min(filtered.length, Math.max(150, want*3), 1500);
+  const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
   const CHUNK = 24;
   const results=[]; let matchCount=0, idx=0, checked=0, lastProg=0;
   while(idx<filtered.length && matchCount<want && checked<MAXCHECK){
