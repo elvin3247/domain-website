@@ -1,11 +1,13 @@
-// /api/check?domain=example.com
-// Returns { state: "available" | "forsale" | "taken" | "unknown", provider? }
+// /api/check?domain=example.com           -> { state, provider? }
+// /api/check?domains=a.com,b.com,c.com     -> { results: [ {state,provider?}, ... ] }
 //
-// Default (no setup): authoritative availability via RDAP (the official registry
-// protocol), with a DNS fallback for TLDs that don't publish RDAP. Needs no API key.
+// state: "available" | "forsale" | "taken" | "unknown"
 //
-// Optional: set the four NAMECHEAP_* env vars to use Namecheap's official
-// availability check on top (see README).
+// Availability comes from DNS-over-HTTPS (Google, then Cloudflare) run server-side
+// and in parallel for the whole batch. NXDOMAIN = available; nameservers present =
+// registered (parked marketplaces -> "forsale", otherwise "taken"); ambiguous is
+// confirmed with an SOA lookup. No API key needed. Set the NAMECHEAP_* env vars to
+// override availability with Namecheap's official check (see README).
 
 const PARKING = [
   { k: "sedoparking", n: "Sedo" }, { k: "sedo.com", n: "Sedo" },
@@ -19,107 +21,119 @@ const PARKING = [
   { k: "domainmarket", n: "DomainMarket" }, { k: "brandbucket", n: "BrandBucket" },
   { k: "snparking", n: "SnapNames" }, { k: "name-services.com", n: "parking" }
 ];
+const enc = encodeURIComponent;
 
-function classify(registered, ns) {
-  if (registered === false) return { state: "available" };
-  if (registered === true) {
-    const hosts = (ns || []).map(h => (h || "").toLowerCase());
-    for (const p of PARKING) {
-      if (hosts.some(h => h.includes(p.k))) return { state: "forsale", provider: p.n };
-    }
-    return { state: "taken" };
+async function fetchT(url, ms) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try { return await fetch(url, { headers: { accept: "application/dns-json" }, signal: ac.signal }); }
+  finally { clearTimeout(t); }
+}
+
+// DNS-over-HTTPS query (Google primary, Cloudflare fallback)
+async function dohQuery(domain, type) {
+  const urls = [
+    "https://dns.google/resolve?name=" + enc(domain) + "&type=" + type,
+    "https://cloudflare-dns.com/dns-query?name=" + enc(domain) + "&type=" + type
+  ];
+  for (const u of urls) {
+    try {
+      const r = await fetchT(u, 4500);
+      if (r.ok) return await r.json();
+    } catch (e) { /* try next resolver */ }
+  }
+  return null;
+}
+
+function classify(nsHosts) {
+  const hosts = (nsHosts || []).map(h => (h || "").toLowerCase());
+  for (const p of PARKING) {
+    if (hosts.some(h => h.includes(p.k))) return { state: "forsale", provider: p.n };
+  }
+  return { state: "taken" };
+}
+
+async function checkDomain(domain) {
+  const ns = await dohQuery(domain, "NS");
+  if (!ns) return { state: "unknown" };                    // both resolvers failed
+  if (ns.Status === 3) return { state: "available" };      // NXDOMAIN = unregistered
+  if (ns.Status === 0) {
+    const hosts = []
+      .concat((ns.Answer || []).filter(a => a.type === 2).map(a => a.data || ""))
+      .concat((ns.Authority || []).filter(a => a.type === 2).map(a => a.data || ""));
+    if (hosts.length) return classify(hosts);
+    // no NS records — confirm registration with an SOA lookup before trusting "open"
+    const soa = await dohQuery(domain, "SOA");
+    if (!soa) return { state: "unknown" };
+    if (soa.Status === 3) return { state: "available" };
+    if (soa.Status === 0 && (soa.Answer || []).some(a => a.type === 6)) return { state: "taken" };
+    return { state: "unknown" };
   }
   return { state: "unknown" };
 }
 
-// Authoritative: RDAP via the rdap.org bootstrap (redirects to the registry's server).
-async function rdap(domain) {
-  try {
-    const r = await fetch("https://rdap.org/domain/" + encodeURIComponent(domain), {
-      headers: { accept: "application/rdap+json" }, redirect: "follow"
-    });
-    if (r.status === 404) return { registered: false, ns: [] };
-    if (r.status === 200) {
-      const j = await r.json().catch(() => null);
-      const ns = (j && Array.isArray(j.nameservers) ? j.nameservers : [])
-        .map(n => (n.ldhName || "").toLowerCase());
-      return { registered: true, ns };
-    }
-    return { registered: null, ns: [] }; // TLD without RDAP, rate limited, etc.
-  } catch (e) {
-    return { registered: null, ns: [] };
-  }
+// server-side concurrency limiter
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx]); }
+  }));
+  return out;
 }
 
-// Fallback: DNS-over-HTTPS nameserver lookup (no CORS limits server-side).
-async function dohNS(domain) {
-  try {
-    const r = await fetch("https://dns.google/resolve?name=" + encodeURIComponent(domain) + "&type=NS",
-      { headers: { accept: "application/json" } });
-    if (!r.ok) return { status: -1, ns: [] };
-    const j = await r.json();
-    const ns = []
-      .concat((j.Answer || []).filter(a => a.type === 2).map(a => a.data || ""))
-      .concat((j.Authority || []).filter(a => a.type === 2).map(a => a.data || ""))
-      .map(h => h.toLowerCase());
-    return { status: j.Status, ns };
-  } catch (e) {
-    return { status: -1, ns: [] };
-  }
-}
-
-// Optional: Namecheap official availability check (returns true/false/null).
-async function namecheapCheck(domain) {
+// optional Namecheap official availability (batch). Returns { domain: true|false }.
+async function namecheapMap(list) {
   const u = process.env.NAMECHEAP_API_USER, k = process.env.NAMECHEAP_API_KEY,
         n = process.env.NAMECHEAP_USERNAME, ip = process.env.NAMECHEAP_CLIENT_IP;
   if (!u || !k || !n || !ip) return null;
   try {
-    const url = "https://api.namecheap.com/xml.response"
-      + "?ApiUser=" + encodeURIComponent(u)
-      + "&ApiKey=" + encodeURIComponent(k)
-      + "&UserName=" + encodeURIComponent(n)
-      + "&ClientIp=" + encodeURIComponent(ip)
-      + "&Command=namecheap.domains.check"
-      + "&DomainList=" + encodeURIComponent(domain);
-    const r = await fetch(url);
+    const url = "https://api.namecheap.com/xml.response?ApiUser=" + enc(u) + "&ApiKey=" + enc(k)
+      + "&UserName=" + enc(n) + "&ClientIp=" + enc(ip)
+      + "&Command=namecheap.domains.check&DomainList=" + enc(list.join(","));
+    const r = await fetchT(url, 6000);
     if (!r.ok) return null;
     const xml = await r.text();
-    const m = xml.match(/Available="(true|false)"/i);
-    return m ? m[1].toLowerCase() === "true" : null;
-  } catch (e) {
-    return null;
-  }
+    const map = {};
+    const tags = xml.match(/<DomainCheckResult\b[^>]*>/gi) || [];
+    for (const tag of tags) {
+      const d = (tag.match(/Domain="([^"]+)"/i) || [])[1];
+      const a = (tag.match(/Available="(true|false)"/i) || [])[1];
+      if (d && a) map[d.toLowerCase()] = a.toLowerCase() === "true";
+    }
+    return map;
+  } catch (e) { return null; }
 }
+
+function sanitize(d) { return String(d || "").trim().toLowerCase(); }
+const valid = d => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && d.length <= 80;
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  // Cache at the edge for a day — registration status changes slowly.
   res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=86400");
 
-  const domain = (req.query && req.query.domain
-    ? req.query.domain
-    : (new URL(req.url, "http://x").searchParams.get("domain") || "")).toString().trim().toLowerCase();
+  const q = req.query || Object.fromEntries(new URL(req.url, "http://x").searchParams);
+  const isBatch = !!q.domains;
+  const list = (q.domains ? String(q.domains).split(",") : (q.domain ? [q.domain] : []))
+    .map(sanitize).filter(valid).slice(0, 50);
 
-  if (!domain || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
-    res.status(400).json({ error: "missing or invalid domain" });
-    return;
-  }
+  if (!list.length) { res.status(400).json({ error: "missing or invalid domain(s)" }); return; }
 
   try {
-    let { registered, ns } = await rdap(domain);
-    if (registered === null) {
-      const d = await dohNS(domain);
-      if (d.status === 3) registered = false;
-      else if (d.status === 0 && d.ns.length) { registered = true; ns = d.ns; }
+    let results = await mapLimit(list, 16, checkDomain);
+    const nc = await namecheapMap(list);
+    if (nc) {
+      results = results.map((r, i) => {
+        const d = list[i];
+        if (nc[d] === true) return { state: "available", source: "namecheap" };
+        if (nc[d] === false && r.state === "available") return { state: "taken", source: "namecheap" };
+        return r;
+      });
     }
-
-    // Namecheap (if configured) is authoritative for availability.
-    const nc = await namecheapCheck(domain);
-    if (nc === true) { res.status(200).json({ state: "available", source: "namecheap" }); return; }
-    if (nc === false && registered !== true) registered = true;
-
-    res.status(200).json(classify(registered, ns));
+    if (isBatch) res.status(200).json({ results });
+    else res.status(200).json(results[0]);
   } catch (e) {
-    res.status(200).json({ state: "unknown" });
+    if (isBatch) res.status(200).json({ results: list.map(() => ({ state: "unknown" })) });
+    else res.status(200).json({ state: "unknown" });
   }
 };

@@ -17,14 +17,18 @@ falls back to the in-browser DNS check, so the file still works on its own.
 
 ## What the backend does (no setup required)
 
-`api/check.js` checks each domain **server-side** using **RDAP** — the official
-registry protocol that says whether a domain is registered. It's more accurate
-than the browser's DNS guess, needs **no API key, no account, no IP whitelist**,
-and it falls back to a DNS lookup for the few TLDs that don't publish RDAP.
+`api/check.js` checks domains **server-side**, in **batches**, using
+**DNS-over-HTTPS** (Google, with Cloudflare as a fallback). NXDOMAIN means the
+name is unregistered (`available`); nameservers pointing at a marketplace mean
+`forsale` (with the marketplace name); other nameservers mean `taken`; anything
+ambiguous is confirmed with an SOA lookup or returned as `unknown`. The app sends
+~24 domains per request, so a 500-name search is a few dozen fast calls instead
+of hundreds of slow ones. No API key, account, or IP whitelist required, and
+results are cached at Vercel's edge for a day.
 
-It returns one of: `available` · `forsale` · `taken` · `unknown` (plus the
-marketplace name for parked domains). Results are cached at Vercel's edge for a
-day, so repeat checks are instant.
+(An earlier version used the RDAP bootstrap at rdap.org; that free service
+rate-limits under bulk load and returns 404 ambiguously, which caused stalls and
+false "available" results — so the backend now uses high-volume DNS instead.)
 
 ---
 

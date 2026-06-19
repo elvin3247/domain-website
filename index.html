@@ -464,15 +464,26 @@ async function doh(domain, type){
   if(!r.ok) throw new Error("doh"); return r.json();
 }
 let backendMode = "auto"; // auto: try /api/check, then fall back to browser DNS; dns: DNS only
-async function checkAvailability(domain){
-  if(backendMode !== "dns"){
-    try{
-      const r = await fetch("/api/check?domain="+encodeURIComponent(domain), {headers:{"accept":"application/json"}});
-      if(r.ok){ const j = await r.json(); if(j && j.state) return j; }
-      throw new Error("no backend");
-    }catch(e){ backendMode = "dns"; }   // no backend deployed -> use browser DNS for the rest of this session
+// Check a batch of domains. Uses the deployed backend (one request for the whole
+// batch) when present, otherwise runs the browser DNS check for each. Returns an
+// array of {state, provider?} aligned to the input order, and fills availCache.
+async function checkBatch(domains){
+  const out = new Array(domains.length);
+  const need = [], needIdx = [];
+  domains.forEach((d,i)=>{ if(availCache.has(d)){ out[i]=availCache.get(d); } else { need.push(d); needIdx.push(i); } });
+  if(need.length){
+    let res = null;
+    if(backendMode !== "dns"){
+      try{
+        const r = await fetch("/api/check?domains="+encodeURIComponent(need.join(",")), {headers:{"accept":"application/json"}});
+        if(r.ok){ const j = await r.json(); if(j && Array.isArray(j.results) && j.results.length===need.length) res = j.results; }
+        if(!res) throw new Error("no backend");
+      }catch(e){ backendMode = "dns"; }   // no backend (e.g. opened as a local file) -> browser DNS
+    }
+    if(!res){ res = await Promise.all(need.map(d=>checkViaDNS(d))); }
+    need.forEach((d,k)=>{ const st=(res[k] && res[k].state)? res[k] : {state:"unknown"}; availCache.set(d,st); out[needIdx[k]]=st; });
   }
-  return checkViaDNS(domain);
+  return out;
 }
 async function checkViaDNS(domain){
   try{
@@ -622,24 +633,22 @@ async function runSearch(){
   const want=wantCount(), minS=minScore();
   const filtered = pool.filter(c=>c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
-  const results=[]; let matchCount=0, next=0, newChecks=0, lastProg=0;
-  const MAXCHECK = Math.min(filtered.length, Math.max(120, want*3), 900);
-  async function worker(){
-    while(true){
-      if(matchCount>=want) return;
-      if(next>=filtered.length || newChecks>=MAXCHECK) return;
-      const i=next++; const c=filtered[i]; const dom=c.sld+poolTld;
-      let r;
-      if(availCache.has(dom)) r=availCache.get(dom);
-      else { r=await checkAvailability(dom); availCache.set(dom,r); newChecks++; }
-      results.push({c, state:r.state, provider:r.provider, idx:i});
-      if(stateShown(r.state)) matchCount++;
-      const now=performance.now(); if(now-lastProg>120){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${matchCount} · checked ${newChecks}`; }
+  const MAXCHECK = Math.min(filtered.length, Math.max(150, want*3), 1500);
+  const CHUNK = 24;
+  const results=[]; let matchCount=0, idx=0, checked=0, lastProg=0;
+  while(idx<filtered.length && matchCount<want && checked<MAXCHECK){
+    const slice = filtered.slice(idx, idx+CHUNK); const base=idx; idx+=slice.length;
+    const states = await checkBatch(slice.map(c=>c.sld+poolTld));
+    for(let k=0;k<slice.length;k++){
+      const st = states[k] || {state:"unknown"};
+      results.push({c:slice[k], state:st.state, provider:st.provider, idx:base+k});
+      if(stateShown(st.state)) matchCount++;
     }
+    checked += slice.length;
+    const now=performance.now(); if(now-lastProg>100){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${matchCount} · checked ${checked}`; }
   }
-  await Promise.all(Array.from({length:12}, worker));
   const matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
-  renderMatches(matches, newChecks);
+  renderMatches(matches, checked);
   searching=false; $("forge").disabled=false;
 }
 function renderShortlist(){
