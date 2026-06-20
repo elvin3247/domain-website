@@ -105,6 +105,7 @@
   .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:14px;margin-top:16px}
   .card{position:relative;background:linear-gradient(180deg,var(--bg-2),#191e2a);border:1px solid var(--line);border-radius:14px;padding:15px 16px 14px;display:flex;flex-direction:column;gap:11px;overflow:hidden;opacity:0;transform:translateY(10px) scale(.985);animation:drop .42s cubic-bezier(.2,.75,.25,1) forwards}
   @keyframes drop{to{opacity:1;transform:none}}
+  body.searching-now .card{opacity:1!important;transform:none!important;animation:none!important}
   .card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--line-2)}
   .card.is-available::before{background:var(--go);box-shadow:0 0 14px var(--go-ln)}
   .card.is-forsale::before{background:var(--sale);box-shadow:0 0 14px var(--sale-ln)}
@@ -708,10 +709,10 @@ async function checkViaDNS(domain){
 }
 
 /* ---------- ember background ---------- */
-(function embers(){
+function startEmbers(){
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; if(reduce) return;
   const cv=document.getElementById("embers"), ctx=cv.getContext("2d");
-  let w,h,dpr,parts=[],burstUntil=0,burstX=0,burstY=0; const COLORS=["#ffc24b","#ff8a3d","#ff6b6b","#ffd98a"];
+  let w,h,dpr,parts=[],ambientN=0,burstUntil=0,burstX=0,burstY=0; const COLORS=["#ffc24b","#ff8a3d","#ff6b6b","#ffd98a"];
   function resize(){ dpr=Math.min(window.devicePixelRatio||1,2); w=cv.width=innerWidth*dpr; h=cv.height=innerHeight*dpr; cv.style.width=innerWidth+"px"; cv.style.height=innerHeight+"px"; }
   resize(); addEventListener("resize", resize);
   function ambient(){ return {x:Math.random()*w,y:h+10*dpr,vx:(Math.random()-.5)*.25*dpr,vy:-(.25+Math.random()*.55)*dpr,r:(.7+Math.random()*1.7)*dpr,life:1,decay:.0016+Math.random()*.0022,c:COLORS[(Math.random()*COLORS.length)|0],b:false}; }
@@ -719,12 +720,12 @@ async function checkViaDNS(domain){
   window.__forgeBurst=function(cx,cy){ burstX=cx*dpr; burstY=cy*dpr; burstUntil=performance.now()+260; for(let i=0;i<26;i++) parts.push(burstP(burstX,burstY)); };
   function frame(now){
     ctx.clearRect(0,0,w,h);
-    if(parts.filter(p=>!p.b).length<46 && Math.random()<.7) parts.push(ambient());
+    if(ambientN<46 && Math.random()<.7){ parts.push(ambient()); ambientN++; }
     if(now<burstUntil && Math.random()<.6) parts.push(burstP(burstX,burstY));
     ctx.globalCompositeOperation="lighter";
     for(let i=parts.length-1;i>=0;i--){
       const p=parts[i]; p.x+=p.vx; p.y+=p.vy; if(!p.b) p.vy*=.999; else p.vy+=.03*dpr; p.life-=p.decay;
-      if(p.life<=0 || p.y< -20*dpr){ parts.splice(i,1); continue; }
+      if(p.life<=0 || p.y< -20*dpr){ if(!p.b) ambientN--; parts.splice(i,1); continue; }
       const a=p.b? p.life : Math.sin(p.life*Math.PI)*.6;
       ctx.beginPath(); ctx.fillStyle=p.c; ctx.globalAlpha=Math.max(0,a); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();
     }
@@ -732,7 +733,8 @@ async function checkViaDNS(domain){
     if(!document.hidden) requestAnimationFrame(frame); else setTimeout(()=>requestAnimationFrame(frame),400);
   }
   requestAnimationFrame(frame);
-})();
+}
+if("requestIdleCallback" in window) requestIdleCallback(startEmbers,{timeout:1500}); else setTimeout(startEmbers,400);
 
 /* ---------- DOM + search ---------- */
 const $ = id => document.getElementById(id);
@@ -813,7 +815,7 @@ function cardHTML(domain, sld, tld, parts, idx, v, state, provider){
   const provTag = (state==="forsale" && provider)?`<span class="word-tag prov">parked · ${provider}</span>`:"";
   const tile = (state==="forsale")? marketTileHTML(domain, provider) : "";
   return `
-  <div class="card is-${state}" data-domain="${domain}" data-score="${v.score}" style="animation-delay:${Math.min(idx*24,520)}ms">
+  <div class="card is-${state}" data-domain="${domain}" data-score="${v.score}" style="animation-delay:${Math.min(idx*8,180)}ms">
     <div class="cardhead">
       <div class="dname"><span class="sld">${sld}</span><span class="tld">${tld}</span></div>
       <div class="vscore" data-tier="${v.tier}"><b>${v.score}</b><span>value</span></div>
@@ -869,15 +871,22 @@ async function confirmAvailable(matches){
 async function runSearch(){
   if(searching) return;
   if(!pool.length){ renderMatches([], 0); $("forge").disabled=false; return; }
-  searching=true; $("forge").disabled=true;
+  searching=true; $("forge").disabled=true; document.body.classList.add("searching-now");
   loadPrices();
   const want=wantCount(), minS=minScore();
-  const wantBuf = Math.min(pool.length, Math.ceil(want*1.4)); // collect a buffer so confirmation drop-outs don't shrink the list
+  const wantBuf = Math.min(pool.length, Math.ceil(want*1.3)); // small buffer so confirmation drop-outs don't shrink the list
   const filtered = pool.filter(c=>c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
   const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
-  const CHUNK = 30, LANES = 6;   // run several batch requests at once for speed
-  const results=[]; let matchCount=0, next=0, checked=0, lastProg=0;
+  const CHUNK = 40, LANES = 6;   // run several batch requests at once for speed
+  const results=[]; let matchCount=0, next=0, checked=0, lastProg=0, lastPaint=0, firstPaint=false;
+  function paint(force){
+    const now=performance.now();
+    if(!force && now-lastPaint<300) return;
+    lastPaint=now;
+    const cur=results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
+    if(cur.length){ renderMatches(cur, checked); firstPaint=true; }
+  }
   async function lane(){
     while(matchCount<wantBuf && next<filtered.length && checked<MAXCHECK){
       const start=next; next+=CHUNK;                       // claim a chunk (synchronous, no overlap between lanes)
@@ -890,15 +899,17 @@ async function runSearch(){
         if(stateShown(st.state)) matchCount++;
       }
       checked += slice.length;
-      const now=performance.now(); if(now-lastProg>100){ lastProg=now; const pe=$("prog"); if(pe) pe.textContent=`found ${Math.min(matchCount,want)} · checked ${checked}`; }
+      paint();                                             // stream results in as they're found
+      const now=performance.now(); if(now-lastProg>100){ lastProg=now; const pe=$("prog"); if(pe && !firstPaint) pe.textContent=`found ${Math.min(matchCount,want)} · checked ${checked}`; }
     }
   }
   await Promise.all(Array.from({length:LANES}, lane));
   let matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
-  renderMatches(matches.slice(0,want), checked);              // show results immediately…
+  renderMatches(matches.slice(0,want), checked);              // show everything collected…
   await confirmAvailable(matches);                            // …then refine with the registry check
   matches = matches.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
   renderMatches(matches, checked);
+  document.body.classList.remove("searching-now");
   searching=false; $("forge").disabled=false;
 }
 function renderShortlist(){

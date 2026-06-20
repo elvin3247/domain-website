@@ -312,7 +312,7 @@ module.exports = async (req, res) => {
     if (confirm) {
       results = await mapLimit(list, 8, rdapConfirm);          // authoritative registry double-check
     } else {
-      results = await mapLimit(list, 16, checkDomain);
+      results = await mapLimit(list, 24, checkDomain);
       const nc = await namecheapMap(list);
       if (nc) {
         results = results.map((r, i) => {
