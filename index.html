@@ -914,7 +914,7 @@ async function runSearch(){
   loadPrices();
   const want=wantCount(), minS=minScore();
   const wantBuf = Math.min(pool.length, Math.ceil(want*1.3)); // small buffer so confirmation drop-outs don't shrink the list
-  const filtered = pool.filter(c=>c.v.score>=minS);
+  const filtered = pool.filter(c=>c.exact || c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Searching…</div><div id="prog">checking availability</div></div>`;
   const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
   const CHUNK = 40, LANES = 6;   // run several batch requests at once for speed
@@ -923,7 +923,7 @@ async function runSearch(){
     const now=performance.now();
     if(!force && now-lastPaint<300) return;
     lastPaint=now;
-    const cur=results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
+    const cur=results.filter(r=>r.c.exact || stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
     if(cur.length){ renderMatches(cur, checked); firstPaint=true; }
   }
   async function lane(){
@@ -935,7 +935,7 @@ async function runSearch(){
       for(let k=0;k<slice.length;k++){
         const st = states[k] || {state:"unknown"};
         results.push({c:slice[k], state:st.state, provider:st.provider, idx:start+k});
-        if(stateShown(st.state)) matchCount++;
+        if(slice[k].exact || stateShown(st.state)) matchCount++;
       }
       checked += slice.length;
       paint();                                             // stream results in as they're found
@@ -943,10 +943,10 @@ async function runSearch(){
     }
   }
   await Promise.all(Array.from({length:LANES}, lane));
-  let matches = results.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
+  let matches = results.filter(r=>r.c.exact || stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
   renderMatches(matches.slice(0,want), checked);              // show everything collected…
   await confirmAvailable(matches);                            // …then refine with the registry check
-  matches = matches.filter(r=>stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
+  matches = matches.filter(r=>r.c.exact || stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
   renderMatches(matches, checked);
   document.body.classList.remove("searching-now");
   searching=false; $("forge").disabled=false;
@@ -992,6 +992,13 @@ async function forge(){
   const starts=($("starts").value||"").toLowerCase().replace(/[^a-z]/g,""), ends=($("ends").value||"").toLowerCase().replace(/[^a-z]/g,"");
   const contains=($("contains").value||"").toLowerCase().replace(/[^a-z]/g,"");
 
+  // the exact thing you typed — pinned to the top, exempt from length/score/style filters
+  const rawTrim=(seedRaw||"").trim().toLowerCase();
+  let exactSld="", exactTld="";
+  const dm=rawTrim.match(/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.([a-z]{2,24})$/);   // "name.tld" -> split off preferred ending
+  if(dm){ exactSld=dm[1]; exactTld="."+dm[2]; }
+  else { exactSld=rawTrim.replace(/[^a-z0-9-]/g,"").replace(/^-+|-+$/g,""); }
+
   // optional AI-generated names (opt-in; backend needs ANTHROPIC_API_KEY)
   let aiCands=[];
   if(aiOn() && tokens.length){
@@ -1014,7 +1021,7 @@ async function forge(){
   if(seedSld && seedSld.length>=2 && seedSld.length<=maxLen) literals.push({sld:seedSld, parts:tokens.slice()});
   for(const t of tokens){ if(t.length>=2 && t.length<=maxLen) literals.push({sld:t, parts:[t]}); }
 
-  const seen2=new Set(); const names=[];
+  const seen2=new Set(exactSld?[exactSld]:[]); const names=[];
   for(const c of [...aiCands, ...literals, ...raw]){
     if(starts && !c.sld.startsWith(starts)) continue;
     if(ends && !c.sld.endsWith(ends)) continue;
@@ -1022,8 +1029,20 @@ async function forge(){
     if(seen2.has(c.sld)) continue; seen2.add(c.sld); names.push(c);
   }
 
-  // expand each name across EVERY selected ending — each name+ending is its own live result
-  pool=[];
+  // the exact term first — across the ending you specified (if any), then the other endings you selected
+  const exactList=[];
+  if(exactSld){
+    const order = exactTld ? [exactTld, ...tlds.filter(t=>t!==exactTld)] : tlds.slice();
+    for(const tld of order){
+      const v=valueScore(exactSld, tld, [exactSld], seedWords);
+      v.resale=resaleValue(exactSld, tld, [exactSld], seedWords);
+      v.reasons=["exact match", ...v.reasons.filter(r=>r!=="exact match" && r!=="on-topic" && r!=="AI pick")];
+      exactList.push({ sld:exactSld, parts:[exactSld], tld, v, rel:1, ai:false, exact:true });
+    }
+  }
+
+  // expand each generated name across EVERY selected ending — each name+ending is its own live result
+  const rest=[];
   for(const c of names){
     const rel = c.ai ? 1 : (relSet.some(t=>c.sld.includes(t)) ? 1 : 0);
     for(const tld of tlds){
@@ -1031,10 +1050,11 @@ async function forge(){
       v.resale=resaleValue(c.sld, tld, c.parts, seedWords);
       if(c.ai) v.reasons=["AI pick", ...v.reasons.filter(r=>r!=="AI pick" && r!=="on-topic")];
       else if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
-      pool.push({ sld:c.sld, parts:c.parts, tld, v, rel, ai:!!c.ai });
+      rest.push({ sld:c.sld, parts:c.parts, tld, v, rel, ai:!!c.ai });
     }
   }
-  pool.sort((a,b)=> (b.rel-a.rel) || ((b.ai?1:0)-(a.ai?1:0)) || (b.v.score-a.v.score)); // AI + on-topic + best score first
+  rest.sort((a,b)=> (b.rel-a.rel) || ((b.ai?1:0)-(a.ai?1:0)) || (b.v.score-a.v.score)); // AI + on-topic + best score first
+  pool=[...exactList, ...rest];
   await runSearch();
 }
 
