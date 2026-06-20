@@ -58,6 +58,10 @@
   .forge:disabled{opacity:.6;cursor:default}
   .forge .hammer{display:inline-block;transition:transform .15s}
   .forge:hover .hammer{transform:rotate(-18deg) translateY(-1px)}
+  .discover-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-2px 2px 2px}
+  .discover-bar .dlabel{font-size:13px;color:var(--muted);font-weight:600}
+  .disc{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:rgba(255,255,255,.03);border:1px solid var(--line-2);border-radius:10px;padding:7px 12px;cursor:pointer;transition:border-color .15s,background .15s}
+  .disc:hover{border-color:#ff8a3d;background:rgba(255,138,61,.08)}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-top:18px}
   .hint{font-size:12px;color:var(--faint);margin:6px 2px 0}
   .rowflex{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
@@ -220,7 +224,7 @@
       <div class="mark" aria-hidden="true"><span class="core"></span></div>
       <div>
         <h1 class="reveal d1">Anvil</h1>
-        <p class="tag reveal d1">Forge domains in any style, score their value, and keep searching until your list is full.</p>
+        <p class="tag reveal d1">Search domains in any style, score their value, and keep going until your list is full.</p>
       </div>
     </div>
   </header>
@@ -237,7 +241,14 @@
         <label class="lab" for="seed">Keyword or business idea</label>
         <input id="seed" type="text" placeholder="e.g. coffee roastery, ai notes, garden tools" autocomplete="off" />
       </div>
-      <button id="forge" class="forge"><span class="hammer">⚒</span> Forge domains</button>
+      <button id="forge" class="forge"><span class="hammer">⚒</span> Search domains</button>
+    </div>
+
+    <div class="discover-bar">
+      <span class="dlabel">No keyword?</span>
+      <button id="discover" class="disc" type="button">✨ Best available</button>
+      <button id="gems" class="disc" type="button">💎 Short gems</button>
+      <span class="hint" style="margin:0;flex-basis:100%">Searches with no seed and surfaces the highest-scoring names that are open right now.</span>
     </div>
 
     <div class="rowflex" style="align-items:flex-start">
@@ -295,7 +306,7 @@
   </section>
 
   <div class="statusbar reveal d3">
-    <span class="count" id="count-label">Ready to forge</span>
+    <span class="count" id="count-label">Ready to search</span>
     <span class="legend">
       <span><span class="dot a"></span>open</span>
       <span><span class="dot s"></span>for sale</span>
@@ -309,7 +320,7 @@
       <svg class="anvil" viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.6" stroke-linejoin="round">
         <path d="M3 9h12c0 2.5-1.6 4-4 4.4V15h2l-1.2 3H7.2L6 15h2v-1.6C5.5 13 3 12 3 9z"/><path d="M15 9l4-1.5V11"/>
       </svg>
-      <div class="big">Pick your styles and forge.</div>
+      <div class="big">Pick your styles and search.</div>
       Mix any of the eight name styles, score each result 0–100, and let Anvil<br>keep checking until it fills your count with open or for-sale domains.
     </div>
   </div>
@@ -327,7 +338,7 @@
             <button class="modebtn active" id="mode-now" type="button">Trending now</button>
             <button class="modebtn" id="mode-rising" type="button">✨ Rising niches</button>
           </div>
-          <div class="hint" id="trends-sub" style="margin:8px 0 0">Top searches on Google today. Tap one to forge domains around it.</div>
+          <div class="hint" id="trends-sub" style="margin:8px 0 0">Top searches on Google today. Tap one to search domains around it.</div>
         </div>
         <div class="trends-controls">
           <select id="trends-geo" class="mini-select" aria-label="Region">
@@ -904,7 +915,7 @@ async function runSearch(){
   const want=wantCount(), minS=minScore();
   const wantBuf = Math.min(pool.length, Math.ceil(want*1.3)); // small buffer so confirmation drop-outs don't shrink the list
   const filtered = pool.filter(c=>c.v.score>=minS);
-  host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Forging…</div><div id="prog">checking availability</div></div>`;
+  host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Searching…</div><div id="prog">checking availability</div></div>`;
   const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
   const CHUNK = 40, LANES = 6;   // run several batch requests at once for speed
   const results=[]; let matchCount=0, next=0, checked=0, lastProg=0, lastPaint=0, firstPaint=false;
@@ -1038,6 +1049,20 @@ function scheduleForge(){
 $("forge").addEventListener("click",(e)=>{ const r=e.currentTarget.getBoundingClientRect(); if(window.__forgeBurst) window.__forgeBurst(r.left+r.width/2, r.top+r.height/2); forge(); });
 $("seed").addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); });
 ["starts","ends","maxlen","contains"].forEach(id=>$(id).addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); }));
+
+// ---- Discover: no-keyword searches that surface the best currently-available names ----
+function setStylesOnly(list){ document.querySelectorAll('#styles .chip[data-style]').forEach(ch=>ch.setAttribute("aria-pressed", list.includes(ch.dataset.style)?"true":"false")); }
+function ensureTlds(list){ document.querySelectorAll('#tlds .chip[data-tld]').forEach(ch=>{ if(list.includes(ch.dataset.tld)) ch.setAttribute("aria-pressed","true"); }); }
+function runDiscover(cfg){
+  switchTab("find");
+  $("seed").value=""; $("contains").value=""; $("starts").value=""; $("ends").value="";
+  setStylesOnly(cfg.styles); ensureTlds(cfg.tlds);
+  $("maxlen").value=String(cfg.maxLen);
+  $("minscore").value=String(cfg.minScore); updateSlider();
+  forge();
+}
+$("discover").addEventListener("click",()=>runDiscover({styles:["real","two","brand","invent"], tlds:[".com",".ai",".io",".co"], maxLen:12, minScore:48}));
+$("gems").addEventListener("click",()=>runDiscover({styles:["real","short","invent"], tlds:[".com",".io",".co",".ai"], maxLen:6, minScore:60}));
 document.querySelectorAll("#tlds .chip[data-tld], #styles .chip[data-style]").forEach(chip=>{
   chip.addEventListener("click",()=>{ chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed")==="true"?"false":"true"); scheduleForge(); });
 });
@@ -1064,8 +1089,8 @@ function setTrendsMode(m){
   $("mode-now").classList.toggle("active", m==="now");
   $("mode-rising").classList.toggle("active", m==="rising");
   $("trends-sub").textContent = m==="rising"
-    ? "Niches with interest climbing over the last month or two (AI + web search). Tap one to forge."
-    : "Top searches on Google today. Tap one to forge domains around it.";
+    ? "Niches with interest climbing over the last month or two (AI + web search). Tap one to search."
+    : "Top searches on Google today. Tap one to search domains around it.";
   $("trends-foot").textContent = m==="rising"
     ? "AI-spotted rising niches — a read on momentum, not a guarantee. Verify demand before committing."
     : "Trending searches are often news and events — scan for the products, niches, and topics worth a domain.";
