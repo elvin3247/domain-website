@@ -221,6 +221,51 @@ async function aiNames(seed, maxLen) {
   } catch (e) { return { names: [], error: "AI request timed out." }; }
 }
 
+// AI "rising niches": Claude + web search surfaces topics/markets climbing over the
+// past month or two, returned as brandable seeds for domain ideas. Needs ANTHROPIC_API_KEY.
+let _ideasCache = {}, _ideasTs = {};
+function parseIdeas(j) {
+  const text = (j.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+  let arr = null; const m = text.match(/\[[\s\S]*\]/);
+  if (m) { try { arr = JSON.parse(m[0]); } catch (e) { arr = null; } }
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (const it of arr) {
+    if (!it) continue;
+    const topic = String(it.topic || it.name || "").replace(/[<>"]/g, "").trim().slice(0, 40);
+    const blurb = String(it.blurb || it.why || "").replace(/[<>"]/g, "").trim().slice(0, 130);
+    if (topic) out.push({ topic, blurb });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+async function aiIdeas(geo) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return { ideas: [], error: "Rising niches needs an ANTHROPIC_API_KEY set in your Vercel project." };
+  geo = (String(geo || "US").toUpperCase().match(/[A-Z]{2}/) || ["US"])[0];
+  if (_ideasCache[geo] && Date.now() - _ideasTs[geo] < 6 * 3600 * 1000) return { ideas: _ideasCache[geo] };
+  const model = process.env.ANVIL_AI_MODEL || "claude-haiku-4-5-20251001";
+  const sys = "You are a trend analyst helping a founder spot rising business niches to build a brand or domain around. Respond with ONLY a JSON array of up to 20 objects, each {\"topic\":\"<1-3 word brandable seed>\",\"blurb\":\"<8-16 word reason it's rising>\"}. No prose outside the JSON.";
+  const user = "Find ~20 niches, products, or markets whose interest has been climbing over the past one to two months" + (geo !== "US" ? (" in " + geo) : "") + " — emerging consumer/business trends (the way peptides spiked recently), not one-day news or celebrities. Each should make a sensible brand or domain idea. Return the JSON array only.";
+  const headers = { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" };
+  try {
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 55000);
+    let r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", headers, signal: ac.signal,
+      body: JSON.stringify({ model, max_tokens: 1600, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }], system: sys, messages: [{ role: "user", content: user }] })
+    });
+    clearTimeout(t);
+    if (!r.ok) { // web search may be unavailable on the account — retry from model knowledge
+      const r2 = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify({ model, max_tokens: 1200, system: sys, messages: [{ role: "user", content: user }] }) });
+      if (!r2.ok) return { ideas: [], error: "AI request failed (" + r.status + ")." };
+      return { ideas: parseIdeas(await r2.json()) };
+    }
+    const ideas = parseIdeas(await r.json());
+    if (ideas.length) { _ideasCache[geo] = ideas; _ideasTs[geo] = Date.now(); }
+    return { ideas };
+  } catch (e) { return { ideas: [], error: "AI request timed out." }; }
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=86400");
@@ -245,6 +290,13 @@ module.exports = async (req, res) => {
 
   if (q.ai) {
     const out = await aiNames(q.seed, q.max);
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json(out);
+    return;
+  }
+
+  if (q.ideas) {
+    const out = await aiIdeas(q.geo);
     res.setHeader("Cache-Control", "no-store");
     res.status(200).json(out);
     return;

@@ -151,6 +151,13 @@
   .trend-card .tr-term{flex:1;font-size:14px;font-weight:600;line-height:1.25}
   .trend-card .tr-traf{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap}
   .trends-msg{grid-column:1/-1;color:var(--muted);font-size:14px;padding:24px 4px;text-align:center}
+  .trends-mode{display:inline-flex;gap:4px;background:var(--bg-1);border:1px solid var(--line);border-radius:11px;padding:4px}
+  .modebtn{font-family:var(--display);font-size:13px;font-weight:600;color:var(--muted);background:transparent;border:none;border-radius:8px;padding:7px 13px;cursor:pointer;transition:.15s}
+  .modebtn:hover{color:var(--ink)}
+  .modebtn.active{color:#1a1206;background:var(--molten)}
+  .trend-card.rising{flex-direction:column;align-items:flex-start;gap:5px}
+  .trend-card.rising .tr-term{font-size:15px}
+  .tr-blurb{font-size:12px;color:var(--muted);line-height:1.35;font-weight:400}
   .ai-chip{border-color:var(--hot-2)!important;color:var(--hot-1)}
   .ai-chip[aria-pressed="true"]{color:#1a1206;background:var(--molten);border-color:transparent!important;box-shadow:0 5px 16px rgba(255,138,61,.3)}
   .word-tag.ai{color:#1a1206;background:var(--molten);border-color:transparent}
@@ -314,8 +321,11 @@
     <section class="panel reveal d2">
       <div class="trends-head">
         <div>
-          <label class="lab" style="margin:0">Trending on Google right now</label>
-          <div class="hint" style="margin:5px 0 0">The top searches today. Tap any one to forge domains around it — great for spotting timely ideas.</div>
+          <div class="trends-mode">
+            <button class="modebtn active" id="mode-now" type="button">Trending now</button>
+            <button class="modebtn" id="mode-rising" type="button">✨ Rising niches</button>
+          </div>
+          <div class="hint" id="trends-sub" style="margin:8px 0 0">Top searches on Google today. Tap one to forge domains around it.</div>
         </div>
         <div class="trends-controls">
           <select id="trends-geo" class="mini-select" aria-label="Region">
@@ -331,7 +341,7 @@
         </div>
       </div>
       <div id="trends-grid" class="trends-grid"><div class="trends-msg">Loading trends…</div></div>
-      <div class="hint" style="margin:14px 0 0">Trending searches are often news and events, not all of them make sense as a brand — scan for the products, niches, and topics worth a domain.</div>
+      <div class="hint" id="trends-foot" style="margin:14px 0 0">Trending searches are often news and events — scan for the products, niches, and topics worth a domain.</div>
     </section>
   </div>
 
@@ -592,8 +602,19 @@ function valueScore(sld, tld, parts, tokens){
 }
 
 /* ---------- estimated resale value (rough $ range) ---------- */
-// Anchored to NameBio/aftermarket patterns: 3L .com ~$10-50K, 4L .com ~$1-10K,
-// one-word .com much higher, two-word industry .com ~$1-15K, gibberish < $100.
+// Calibrated to reported NameBio/aftermarket patterns: short + .com + commercial
+// keyword drives value; random word-pairs sell modestly; pronounceable CVCV gets a
+// premium; gibberish < $100. Off-market private sales aren't captured anywhere, so
+// these ranges (like every appraisal tool) undercount.
+const PREMIUM_KW = {
+  insurance:3.5, insure:3.2, insured:2.6, loan:3, loans:3, lend:2.6, lending:2.6, mortgage:3, casino:3, betting:2.4, poker:2, attorney:3, lawyer:2.5, legal:1.8,
+  credit:2.2, bank:2.2, banking:2.2, invest:2, investing:2, finance:2, financial:2, fintech:1.9, capital:1.7,
+  crypto:2.4, bitcoin:2.2, nft:1.5, ai:2.3, vpn:2, hosting:1.8, cloud:1.6, software:1.4, app:1.3, saas:1.5,
+  pay:2.2, payments:2, payment:2, tax:1.8, taxes:1.8, health:1.6, clinic:1.6, dental:1.9, dentist:1.9, rehab:2.2,
+  therapy:1.6, medical:1.7, pharma:1.8, realty:1.7, estate:1.5, homes:1.5, hotel:1.7, hotels:1.7, travel:1.5,
+  flights:1.6, solar:1.7, energy:1.5, shop:1.3, store:1.3, deals:1.3, jobs:1.7, hire:1.5, dating:1.8, gaming:1.5
+};
+function isCVCV(s){ return /^([bcdfghjklmnpqrstvwxz][aeiouy]){2}([bcdfghjklmnpqrstvwxz][aeiouy]?)?$/.test(s); }
 function roundNice(n){
   if(n<100) return Math.round(n/10)*10;
   if(n<500) return Math.round(n/50)*50;
@@ -611,23 +632,25 @@ function resaleValue(sld, tld, parts, tokens){
   const ph=phonetics(sld);
   let mid;
   if(L<=2) mid=120000;
-  else if(L===3) mid=18000;
-  else if(oneWord) mid = L<=4?40000 : L<=6?15000 : L<=8?6000 : L<=10?2500 : 1200;
-  else if(twoWord) mid = L<=8?2000 : L<=11?900 : L<=14?400 : 180;
-  else if(realParts.length>=1) mid = L<=8?700 : L<=11?350 : 150;
-  else if(ph.pronounceable) mid = L<=4?3000 : L<=5?1500 : L<=6?800 : L<=8?300 : 120;
-  else mid = L<=5?300 : L<=7?120 : 60;
-  // commercial keyword premium (ai, pay, crypto, loan, insurance…)
-  let kw=0; const cs=[...parts]; if(tokens) for(const t of tokens) cs.push(t);
-  for(const p of cs){ if(TREND[p]!=null && TREND[p]>kw) kw=TREND[p]; }
-  if(kw>0) mid *= (1 + kw*1.2);
+  else if(L===3) mid = ph.pronounceable?14000:7000;             // LLL vs pronounceable 3L
+  else if(oneWord) mid = L<=4?45000 : L<=6?16000 : L<=8?6000 : L<=10?2400 : 1100;
+  else if(twoWord) mid = L<=8?650 : L<=11?320 : L<=14?170 : 110; // random pairs are modest; keyword pairs lifted below
+  else if(realParts.length>=1) mid = L<=8?480 : L<=11?250 : 130;
+  else if(ph.pronounceable) mid = (L===4 && isCVCV(sld))?3500 : L<=4?2200 : L<=5?1100 : L<=6?640 : L<=8?280 : 110;
+  else mid = L<=5?260 : L<=7?110 : 55;                          // gibberish
+  // commercial keyword category premium (insurance/loan/finance/ai… command real multiples)
+  let kw=1; const cs=[...parts]; if(tokens) for(const t of tokens) cs.push(t);
+  for(const p of cs){ if(PREMIUM_KW[p] && PREMIUM_KW[p]>kw) kw=PREMIUM_KW[p]; }
+  mid *= kw;
+  if(kw>1.6) mid = Math.max(mid, kw*260);                       // floor so commercial names aren't undercut by length
   // extension multiplier vs .com
   const tmul={".com":1, ".ai":0.8, ".io":0.42, ".co":0.32, ".net":0.2, ".org":0.17, ".app":0.16, ".dev":0.15};
   mid *= (tmul[tld]!=null?tmul[tld]:0.1);
   if(/[-0-9]/.test(sld)) mid*=0.25;
-  if(ph.cl3>=1) mid*=0.6;
+  if(ph.cl3>=1) mid*=0.55;
   mid=Math.max(40, Math.round(mid));
-  const low=roundNice(mid*0.5), high=roundNice(mid*1.9);
+  // wide spread reflects the high variance in reported sales
+  const low=roundNice(mid*0.45), high=roundNice(mid*2.4);
   const label = mid<110 ? "under $100" : (fmtUSD(low)+"–"+fmtUSD(high));
   return {mid, low, high, label};
 }
@@ -976,9 +999,25 @@ function switchTab(which){
   $("tab-find").hidden = !find; $("tab-trends").hidden = find;
   $("tab-btn-find").classList.toggle("active", find);
   $("tab-btn-trends").classList.toggle("active", !find);
-  if(!find) loadTrends(false);
+  if(!find) reloadTrends(false);
 }
-let trendsLoaded=false, trendsLoading=false;
+let trendsMode="now";
+let trendsLoaded=false, trendsLoading=false, ideasLoaded=false, ideasLoading=false;
+function setTrendsMode(m){
+  if(trendsMode===m) return;
+  trendsMode=m;
+  $("mode-now").classList.toggle("active", m==="now");
+  $("mode-rising").classList.toggle("active", m==="rising");
+  $("trends-sub").textContent = m==="rising"
+    ? "Niches with interest climbing over the last month or two (AI + web search). Tap one to forge."
+    : "Top searches on Google today. Tap one to forge domains around it.";
+  $("trends-foot").textContent = m==="rising"
+    ? "AI-spotted rising niches — a read on momentum, not a guarantee. Verify demand before committing."
+    : "Trending searches are often news and events — scan for the products, niches, and topics worth a domain.";
+  reloadTrends(false);
+}
+function reloadTrends(force){ return trendsMode==="rising" ? loadIdeas(force) : loadTrends(force); }
+function seedFromCard(term){ $("seed").value=term; switchTab("find"); $("forge").click(); }
 async function loadTrends(force){
   if(trendsLoading || (trendsLoaded && !force)) return;
   trendsLoading=true;
@@ -996,17 +1035,40 @@ async function loadTrends(force){
       const traf=it.traffic?`<span class="tr-traf">${String(it.traffic).replace(/[<>"]/g,"")}</span>`:"";
       return `<button class="trend-card" data-term="${term}" type="button"><span class="tr-rank">${i+1}</span><span class="tr-term">${term}</span>${traf}</button>`;
     }).join("");
-    grid.querySelectorAll(".trend-card").forEach(b=>b.addEventListener("click",()=>{
-      $("seed").value=b.dataset.term; switchTab("find"); $("forge").click();
-    }));
+    grid.querySelectorAll(".trend-card").forEach(b=>b.addEventListener("click",()=>seedFromCard(b.dataset.term)));
     trendsLoaded=true;
   }catch(e){ grid.innerHTML='<div class="trends-msg">Couldn\u2019t load trends right now. Tap Refresh.</div>'; }
   trendsLoading=false;
 }
+async function loadIdeas(force){
+  if(ideasLoading || (ideasLoaded && !force)) return;
+  ideasLoading=true;
+  const grid=$("trends-grid"); grid.innerHTML='<div class="trends-msg">Scanning for rising niches… this can take 15–30s.</div>';
+  const geo=$("trends-geo").value||"US";
+  try{
+    const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),60000);
+    const r=await fetch("/api/check?ideas=1&geo="+encodeURIComponent(geo),{headers:{accept:"application/json"},signal:ac.signal});
+    clearTimeout(t);
+    const j=r.ok?await r.json():null;
+    if(j && j.error){ grid.innerHTML='<div class="trends-msg">'+String(j.error).replace(/[<>]/g,"")+'</div>'; ideasLoading=false; return; }
+    const items=(j&&Array.isArray(j.ideas))?j.ideas:[];
+    if(!items.length){ grid.innerHTML='<div class="trends-msg">Couldn\u2019t generate niches right now. Tap Refresh.</div>'; ideasLoaded=false; ideasLoading=false; return; }
+    grid.innerHTML=items.slice(0,20).map(it=>{
+      const term=String(it.topic||"").replace(/[<>]/g,"").replace(/"/g,"&quot;");
+      const blurb=String(it.blurb||"").replace(/[<>]/g,"").replace(/"/g,"&quot;");
+      return `<button class="trend-card rising" data-term="${term}" type="button"><span class="tr-term">${term}</span>${blurb?`<span class="tr-blurb">${blurb}</span>`:""}</button>`;
+    }).join("");
+    grid.querySelectorAll(".trend-card").forEach(b=>b.addEventListener("click",()=>seedFromCard(b.dataset.term)));
+    ideasLoaded=true;
+  }catch(e){ grid.innerHTML='<div class="trends-msg">Niche scan timed out. Tap Refresh to try again.</div>'; }
+  ideasLoading=false;
+}
+$("mode-now").addEventListener("click",()=>setTrendsMode("now"));
+$("mode-rising").addEventListener("click",()=>setTrendsMode("rising"));
 $("tab-btn-find").addEventListener("click",()=>switchTab("find"));
 $("tab-btn-trends").addEventListener("click",()=>switchTab("trends"));
-$("trends-refresh").addEventListener("click",()=>loadTrends(true));
-$("trends-geo").addEventListener("change",()=>loadTrends(true));
+$("trends-refresh").addEventListener("click",()=>reloadTrends(true));
+$("trends-geo").addEventListener("change",()=>{ trendsLoaded=false; ideasLoaded=false; reloadTrends(true); });
 
 loadPrices();
 requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add("lit")));
