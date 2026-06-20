@@ -96,6 +96,7 @@
   .dot.a{background:var(--go);box-shadow:0 0 8px var(--go)} .dot.s{background:var(--sale);box-shadow:0 0 8px var(--sale)}
   .dot.t{background:var(--stop)} .dot.u{background:var(--warn)}
   .notice{font-size:13.5px;color:var(--muted);background:rgba(255,255,255,.02);border:1px dashed var(--line-2);border-radius:12px;padding:13px 15px;margin:6px 2px 0}
+  .aff-note{color:var(--faint);font-size:12px}
   .notice b{color:var(--ink);font-weight:600}
   .loader{text-align:center;padding:52px 20px;color:var(--muted)}
   .loader .ring{width:34px;height:34px;border-radius:50%;border:3px solid var(--line-2);border-top-color:var(--hot-2);margin:0 auto 16px;animation:spin .8s linear infinite}
@@ -260,7 +261,7 @@
       <div><label class="lab" for="maxlen">Max length</label><input id="maxlen" type="text" inputmode="numeric" value="12" /><p class="hint">Letters before the dot</p></div>
       <div><label class="lab" for="starts">Starts with</label><input id="starts" type="text" placeholder="letter or word" autocomplete="off" /></div>
       <div><label class="lab" for="ends">Ends with</label><input id="ends" type="text" placeholder="letter or word" autocomplete="off" /></div>
-      <div><label class="lab" for="count">How many to find</label><input id="count" type="text" inputmode="numeric" value="30" /><p class="hint">Up to 600 · big numbers take longer</p></div>
+      <div><label class="lab" for="contains">Must contain</label><input id="contains" type="text" placeholder="letters anywhere" autocomplete="off" /></div>
     </div>
 
     <div class="rowflex sliderrow">
@@ -274,9 +275,9 @@
       <label class="lab" style="margin:0">Endings</label>
       <div class="chips" id="tlds">
         <button class="chip" data-tld=".com" aria-pressed="true">.com</button>
-        <button class="chip" data-tld=".ai" aria-pressed="false">.ai</button>
-        <button class="chip" data-tld=".io" aria-pressed="false">.io</button>
-        <button class="chip" data-tld=".co" aria-pressed="false">.co</button>
+        <button class="chip" data-tld=".ai" aria-pressed="true">.ai</button>
+        <button class="chip" data-tld=".io" aria-pressed="true">.io</button>
+        <button class="chip" data-tld=".co" aria-pressed="true">.co</button>
         <button class="chip" data-tld=".net" aria-pressed="false">.net</button>
         <button class="chip" data-tld=".org" aria-pressed="false">.org</button>
         <button class="chip" data-tld=".app" aria-pressed="false">.app</button>
@@ -765,9 +766,36 @@ let searching = false, hasSearched = false, forgeTimer = null;
 
 function selectedTlds(){ return [...document.querySelectorAll("#tlds .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.tld); }
 function selectedStyles(){ return new Set([...document.querySelectorAll("#styles .chip")].filter(c=>c.getAttribute("aria-pressed")==="true").map(c=>c.dataset.style).filter(Boolean)); }
-function ncUrl(d){ return "https://www.namecheap.com/domains/registration/results/?domain="+encodeURIComponent(d); }
-function marketUrl(d){ return "https://www.godaddy.com/domainsearch/find?domainToCheck="+encodeURIComponent(d); }
+/* ---------- affiliate links ----------
+   Fill these in AFTER each program approves you. Until then every link works as a normal
+   registrar link, so the app is fully functional before you monetize.
+
+   Namecheap, GoDaddy and Dynadot all run through CJ Affiliate (cj.com). For each one:
+     1. In CJ, open the advertiser and use the "Deep Link" generator.
+     2. It produces a tracking URL that ends with "?url=" (or "&url=").
+     3. Paste everything UP TO AND INCLUDING that "url=" below as `cj`. Anvil appends the
+        encoded destination automatically. Example:
+          cj: "https://www.anrdoezrs.net/links/1234567/type/dlg/sid/anvil/?url="
+   Porkbun runs its own in-house program — paste the referral param it gives you
+   (commonly "ref"), or leave blank. Example:  Porkbun:{param:"ref", id:"yourporkbunid"}
+*/
+const AFFILIATE = {
+  Namecheap: { cj: "" },
+  GoDaddy:   { cj: "" },
+  Dynadot:   { cj: "" },   // or swap in your Dynadot Ambassador link as `prefix`
+  Porkbun:   { param: "", id: "" }
+};
+function affilify(name, url){
+  const a = AFFILIATE[name]; if(!a) return url;
+  if(a.cj)            return a.cj + encodeURIComponent(url);
+  if(a.prefix)        return a.prefix + encodeURIComponent(url);
+  if(a.param && a.id) return url + (url.includes("?")?"&":"?") + encodeURIComponent(a.param) + "=" + encodeURIComponent(a.id);
+  return url;
+}
+function affiliateActive(){ return Object.values(AFFILIATE).some(a=>a && (a.cj || a.prefix || (a.param && a.id))); }
 const enc = encodeURIComponent;
+function ncUrl(d){ return affilify("Namecheap", "https://www.namecheap.com/domains/registration/results/?domain="+enc(d)); }
+function marketUrl(d){ return affilify("GoDaddy", "https://www.godaddy.com/domainsearch/find?domainToCheck="+enc(d)); }
 const REGISTRARS = [
   {n:"Namecheap", u:d=>"https://www.namecheap.com/domains/registration/results/?domain="+enc(d)},
   {n:"Porkbun",   u:d=>"https://porkbun.com/checkout/search?q="+enc(d)},
@@ -783,7 +811,7 @@ const MARKETS = [
 ];
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1600); }
 function minScore(){ return parseInt($("minscore").value,10)||0; }
-function wantCount(){ return Math.max(1,Math.min(600,parseInt($("count").value,10)||30)); }
+function wantCount(){ return 40; }   // fixed target; results now span all selected endings
 function updateSlider(){ const v=minScore(); $("minscore-num").textContent=v; $("minscore").style.background=`linear-gradient(to right, #ff8a3d 0%, #ffc24b ${v}%, var(--line-2) ${v}%, var(--line-2) 100%)`; }
 function stateShown(state){
   if(state==="available") return $("f-open").checked;
@@ -799,11 +827,11 @@ function pillHTML(state){
 }
 function sourcesHTML(domain, state){
   if(state==="forsale") return "";
-  return `<div class="sources">`+ REGISTRARS.map((r,i)=>`<a class="src${i===0?' primary':''}" href="${r.u(domain)}" target="_blank" rel="noopener">${r.n}</a>`).join("") + `</div>`;
+  return `<div class="sources">`+ REGISTRARS.map((r,i)=>`<a class="src${i===0?' primary':''}" href="${affilify(r.n, r.u(domain))}" target="_blank" rel="noopener sponsored">${r.n}</a>`).join("") + `</div>`;
 }
 function marketTileHTML(domain, provider){
   const where = provider ? `Listed at <b>${provider}</b>` : `On the aftermarket`;
-  const links = MARKETS.map(m=>`<a href="${m.u(domain)}" target="_blank" rel="noopener">${m.n}</a>`).join("");
+  const links = MARKETS.map(m=>`<a href="${affilify(m.n, m.u(domain))}" target="_blank" rel="noopener sponsored">${m.n}</a>`).join("");
   return `<div class="market-tile">
       <div class="mt-row"><span class="mt-where">${where}</span><span class="mt-price">price on listing →</span></div>
       <div class="mt-links">${links}</div>
@@ -840,8 +868,8 @@ function renderMatches(matches, evaluated){
   }
   let open=0,sale=0,unk=0,use=0;
   for(const m of matches){ if(m.state==="available")open++; else if(m.state==="forsale")sale++; else if(m.state==="taken")use++; else unk++; }
-  host.innerHTML=`<div class="notice">Best-first, checked the <b>${poolTld}</b> version of each name. ${poolOthers.length?`Other endings (${poolOthers.join(", ")}) get verify links.`:""}</div>
-    <div class="results">${ matches.map((m,i)=>cardHTML(m.c.sld+poolTld, m.c.sld, poolTld, m.c.parts, i, m.c.v, m.state, m.provider)).join("") }</div>`;
+  host.innerHTML=`<div class="notice">Best-first across your selected endings, each name checked live. ${affiliateActive()?'<span class="aff-note">Some links are affiliate links — Anvil may earn a commission at no cost to you.</span>':""}</div>
+    <div class="results">${ matches.map((m,i)=>cardHTML(m.c.sld+(m.c.tld||poolTld), m.c.sld, (m.c.tld||poolTld), m.c.parts, i, m.c.v, m.state, m.provider)).join("") }</div>`;
   const bits=[]; if(open)bits.push(`${open} open`); if(sale)bits.push(`${sale} for sale`); if(use)bits.push(`${use} taken`); if(unk)bits.push(`${unk} unverified`);
   $("count-label").innerHTML=`<span class="hl">${matches.length}</span> found · ${bits.join(" · ")} · ${evaluated} checked`;
   host.querySelectorAll(".card").forEach(card=>{
@@ -861,10 +889,10 @@ async function confirmAvailable(matches){
   const chunks=[]; for(let i=0;i<avail.length;i+=30) chunks.push(avail.slice(i,i+30));
   try{
     await Promise.all(chunks.map(async slice=>{
-      const r = await fetch("/api/check?confirm=1&domains="+encodeURIComponent(slice.map(m=>m.c.sld+poolTld).join(",")), {headers:{accept:"application/json"}});
+      const r = await fetch("/api/check?confirm=1&domains="+encodeURIComponent(slice.map(m=>m.c.sld+(m.c.tld||poolTld)).join(",")), {headers:{accept:"application/json"}});
       if(!r.ok) return;
       const j = await r.json(); if(!j || !Array.isArray(j.results)) return;
-      slice.forEach((m,k)=>{ const st=j.results[k]; if(st && st.state && st.state!=="available"){ m.state=st.state; m.provider=st.provider; availCache.set(m.c.sld+poolTld, st); } });
+      slice.forEach((m,k)=>{ const st=j.results[k]; if(st && st.state && st.state!=="available"){ m.state=st.state; m.provider=st.provider; availCache.set(m.c.sld+(m.c.tld||poolTld), st); } });
     }));
   }catch(e){ /* no backend / error -> skip confirmation */ }
 }
@@ -892,7 +920,7 @@ async function runSearch(){
       const start=next; next+=CHUNK;                       // claim a chunk (synchronous, no overlap between lanes)
       const slice=filtered.slice(start, start+CHUNK);
       if(!slice.length) break;
-      const states = await checkBatch(slice.map(c=>c.sld+poolTld));
+      const states = await checkBatch(slice.map(c=>c.sld+(c.tld||poolTld)));
       for(let k=0;k<slice.length;k++){
         const st = states[k] || {state:"unknown"};
         results.push({c:slice[k], state:st.state, provider:st.provider, idx:start+k});
@@ -944,13 +972,14 @@ async function forge(){
   const styles=selectedStyles();
   if(styles.size===0 && !aiOn()){ toast("Pick at least one name style (or turn on AI names)"); return; }
   hasSearched=true;
-  poolTld=tlds[0]; poolOthers=tlds.slice(1);
+  poolTld=tlds[0]; poolOthers=[];
   const seedRaw = $("seed").value || "";
   const tokens = seedRaw.toLowerCase().split(/[^a-z]+/).filter(t=>t.length>=2);
   const seedWords = expandKeyword(tokens);                  // keyword + curated synonyms
   const relList = seedWords.filter(w=>w.length>=3); const relSet = relList.length?relList:seedWords;
   const maxLen = Math.max(3,Math.min(40,parseInt($("maxlen").value,10)||12));
   const starts=($("starts").value||"").toLowerCase().replace(/[^a-z]/g,""), ends=($("ends").value||"").toLowerCase().replace(/[^a-z]/g,"");
+  const contains=($("contains").value||"").toLowerCase().replace(/[^a-z]/g,"");
 
   // optional AI-generated names (opt-in; backend needs ANTHROPIC_API_KEY)
   let aiCands=[];
@@ -968,18 +997,33 @@ async function forge(){
   }
 
   const raw = styles.size ? generateNames({ seed:seedRaw, seedWords, maxLen, starts:$("starts").value, ends:$("ends").value, styles }) : [];
-  const seen2=new Set(aiCands.map(c=>c.sld));
-  const merged=[...aiCands];
-  for(const c of raw){ if(!seen2.has(c.sld)){ seen2.add(c.sld); merged.push(c); } }
 
-  pool=merged.map(c=>{
-    const v=valueScore(c.sld, poolTld, c.parts, seedWords);
-    v.resale=resaleValue(c.sld, poolTld, c.parts, seedWords);
+  // always include the literal name you typed (and each word) so it's checked across every ending
+  const literals=[]; const seedSld=tokens.join("");
+  if(seedSld && seedSld.length>=2 && seedSld.length<=maxLen) literals.push({sld:seedSld, parts:tokens.slice()});
+  for(const t of tokens){ if(t.length>=2 && t.length<=maxLen) literals.push({sld:t, parts:[t]}); }
+
+  const seen2=new Set(); const names=[];
+  for(const c of [...aiCands, ...literals, ...raw]){
+    if(starts && !c.sld.startsWith(starts)) continue;
+    if(ends && !c.sld.endsWith(ends)) continue;
+    if(contains && !c.sld.includes(contains)) continue;
+    if(seen2.has(c.sld)) continue; seen2.add(c.sld); names.push(c);
+  }
+
+  // expand each name across EVERY selected ending — each name+ending is its own live result
+  pool=[];
+  for(const c of names){
     const rel = c.ai ? 1 : (relSet.some(t=>c.sld.includes(t)) ? 1 : 0);
-    if(c.ai) v.reasons=["AI pick", ...v.reasons.filter(r=>r!=="AI pick" && r!=="on-topic")];
-    else if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
-    return { ...c, v, rel, ai:!!c.ai };
-  }).sort((a,b)=> (b.rel-a.rel) || ((b.ai?1:0)-(a.ai?1:0)) || (b.v.score-a.v.score)); // AI + on-topic first
+    for(const tld of tlds){
+      const v=valueScore(c.sld, tld, c.parts, seedWords);
+      v.resale=resaleValue(c.sld, tld, c.parts, seedWords);
+      if(c.ai) v.reasons=["AI pick", ...v.reasons.filter(r=>r!=="AI pick" && r!=="on-topic")];
+      else if(rel) v.reasons=["on-topic", ...v.reasons.filter(r=>r!=="on-topic")];
+      pool.push({ sld:c.sld, parts:c.parts, tld, v, rel, ai:!!c.ai });
+    }
+  }
+  pool.sort((a,b)=> (b.rel-a.rel) || ((b.ai?1:0)-(a.ai?1:0)) || (b.v.score-a.v.score)); // AI + on-topic + best score first
   await runSearch();
 }
 
@@ -993,7 +1037,7 @@ function scheduleForge(){
 /* events */
 $("forge").addEventListener("click",(e)=>{ const r=e.currentTarget.getBoundingClientRect(); if(window.__forgeBurst) window.__forgeBurst(r.left+r.width/2, r.top+r.height/2); forge(); });
 $("seed").addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); });
-["starts","ends","maxlen","count"].forEach(id=>$(id).addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); }));
+["starts","ends","maxlen","contains"].forEach(id=>$(id).addEventListener("keydown",e=>{ if(e.key==="Enter") $("forge").click(); }));
 document.querySelectorAll("#tlds .chip[data-tld], #styles .chip[data-style]").forEach(chip=>{
   chip.addEventListener("click",()=>{ chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed")==="true"?"false":"true"); scheduleForge(); });
 });

@@ -75,18 +75,28 @@ async function checkDomain(domain) {
 // Authoritative registry double-check via RDAP. Used only to confirm domains that
 // DNS reported as "available", catching registered-but-undelegated false positives.
 async function rdapConfirm(domain) {
-  try {
-    const r = await fetchT("https://rdap.org/domain/" + enc(domain), 6000, { accept: "application/rdap+json" });
-    if (r.status === 404) return { state: "available" };          // registry has no record -> truly open
-    if (r.status >= 200 && r.status < 300) {
-      const j = await r.json().catch(() => null);
-      const ns = (j && Array.isArray(j.nameservers) ? j.nameservers : []).map(n => (n.ldhName || "").toLowerCase());
-      return classify(ns);                                        // registered -> taken / forsale
-    }
-    return { state: "available" };                                // couldn't determine -> leave as-is
-  } catch (e) {
-    return { state: "available" };
+  const tld = domain.slice(domain.lastIndexOf(".") + 1);
+  // Authoritative registry RDAP for the big TLDs (reliable 200/404), bootstrap for the rest.
+  const REGISTRY = {
+    com: "https://rdap.verisign.com/com/v1/domain/",
+    net: "https://rdap.verisign.com/net/v1/domain/"
+  };
+  const urls = REGISTRY[tld]
+    ? [REGISTRY[tld] + enc(domain), "https://rdap.org/domain/" + enc(domain)]
+    : ["https://rdap.org/domain/" + enc(domain)];
+  for (const url of urls) {
+    try {
+      const r = await fetchT(url, 6000, { accept: "application/rdap+json" });
+      if (r.status === 404) return { state: "available" };          // registry has no record -> truly open
+      if (r.status >= 200 && r.status < 300) {                       // a record exists -> registered
+        const j = await r.json().catch(() => null);
+        const ns = (j && Array.isArray(j.nameservers) ? j.nameservers : []).map(n => (n.ldhName || "").toLowerCase());
+        return classify(ns);                                         // taken, or forsale if parked
+      }
+      // any other status (429/403/5xx/redirect): try the next source
+    } catch (e) { /* network/timeout: try the next source */ }
   }
+  return { state: "unknown" };   // could not positively confirm -> never claim "available"
 }
 
 // server-side concurrency limiter
