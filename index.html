@@ -67,6 +67,8 @@
   .discover-bar .dlabel{font-size:13px;color:var(--muted);font-weight:600}
   .disc{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:rgba(255,255,255,.03);border:1px solid var(--line-2);border-radius:10px;padding:7px 12px;cursor:pointer;transition:border-color .15s,background .15s}
   .disc:hover{border-color:#ff8a3d;background:rgba(255,138,61,.08)}
+  .loadmore{display:block;width:100%;margin:18px 0 4px;padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--line-2);border-radius:12px;color:var(--ink);font-family:var(--mono);font-size:13.5px;letter-spacing:.02em;cursor:pointer;transition:border-color .15s,background .15s}
+  .loadmore:hover{border-color:#ff8a3d;background:rgba(255,138,61,.08)}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:15px;margin-top:18px}
   .hint{font-size:12px;color:var(--faint);margin:6px 2px 0}
   .rowflex{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
@@ -309,6 +311,16 @@
         <button class="chip" data-tld=".org" aria-pressed="false">.org</button>
         <button class="chip" data-tld=".app" aria-pressed="false">.app</button>
         <button class="chip" data-tld=".dev" aria-pressed="false">.dev</button>
+        <button class="chip" data-tld=".xyz" aria-pressed="false">.xyz</button>
+        <button class="chip" data-tld=".tech" aria-pressed="false">.tech</button>
+        <button class="chip" data-tld=".shop" aria-pressed="false">.shop</button>
+        <button class="chip" data-tld=".store" aria-pressed="false">.store</button>
+        <button class="chip" data-tld=".site" aria-pressed="false">.site</button>
+        <button class="chip" data-tld=".online" aria-pressed="false">.online</button>
+        <button class="chip" data-tld=".me" aria-pressed="false">.me</button>
+        <button class="chip" data-tld=".info" aria-pressed="false">.info</button>
+        <button id="tld-all" class="chip util" type="button">✓ All</button>
+        <button id="tld-core" class="chip util" type="button">Core 4</button>
       </div>
     </div>
 
@@ -597,7 +609,7 @@ function generateNames(opts){
     if(starts && !c.sld.startsWith(starts)) continue;
     if(ends && !c.sld.endsWith(ends)) continue;
     passed.push({sld:c.sld, parts:c.parts.filter(p=>p!=="·")});
-    if(passed.length>=5000) break;
+    if(passed.length>=8000) break;
   }
   return passed;
 }
@@ -796,6 +808,7 @@ let pool = [], poolTld = ".com", poolOthers = [];
 const availCache = new Map();
 let tldPrices = null; // { ".com": 11.06, ... } base registration prices from Porkbun
 let lastShown = [], lastChecked = 0; // last confirmed result set, kept so sorting re-renders without re-searching
+let shownCount = 60; const PAGE = 60; // how many results are visible; "Load more" reveals another page
 async function loadPrices(){
   if(tldPrices) return tldPrices;
   try{
@@ -919,17 +932,19 @@ function cardHTML(domain, sld, tld, parts, idx, v, state, provider){
     </div>
   </div>`;
 }
-function renderMatches(matches, evaluated){
+function renderMatches(matches, evaluated, statsArr){
+  const stats = statsArr || matches;
   if(matches.length===0){
     host.innerHTML=`<div class="empty"><div class="big">Nothing matched in this pool.</div>Lower the min value score, add more name styles or endings (.io / .ai), or allow longer names.</div>`;
     $("count-label").textContent=`0 found · ${evaluated} checked`; return;
   }
   let open=0,sale=0,unk=0,use=0;
-  for(const m of matches){ if(m.state==="available")open++; else if(m.state==="forsale")sale++; else if(m.state==="taken")use++; else unk++; }
+  for(const m of stats){ if(m.state==="available")open++; else if(m.state==="forsale")sale++; else if(m.state==="taken")use++; else unk++; }
   host.innerHTML=`<div class="notice">Best-first across your selected endings, each name checked live. ${affiliateActive()?'<span class="aff-note">Some links are affiliate links — Anvil may earn a commission at no cost to you.</span>':""}</div>
     <div class="results">${ matches.map((m,i)=>cardHTML(m.c.sld+(m.c.tld||poolTld), m.c.sld, (m.c.tld||poolTld), m.c.parts, i, m.c.v, m.state, m.provider)).join("") }</div>`;
   const bits=[]; if(open)bits.push(`${open} open`); if(sale)bits.push(`${sale} for sale`); if(use)bits.push(`${use} taken`); if(unk)bits.push(`${unk} unverified`);
-  $("count-label").innerHTML=`<span class="hl">${matches.length}</span> found · ${bits.join(" · ")} · ${evaluated} checked`;
+  const showing = matches.length < stats.length ? `showing ${matches.length} of ` : "";
+  $("count-label").innerHTML=`${showing}<span class="hl">${stats.length}</span> found · ${bits.join(" · ")} · ${evaluated} checked`;
   host.querySelectorAll(".card").forEach(card=>{
     const d=card.dataset.domain, sc=card.dataset.score;
     card.querySelector(".copy").onclick=async ()=>{ try{ await navigator.clipboard.writeText(d); toast("Copied "+d); }catch(e){ toast("Copy not available here"); } };
@@ -954,10 +969,31 @@ function sortMatches(arr, key){
   a.sort((x,y)=> ((y.c.exact?1:0)-(x.c.exact?1:0)) || cmp(x,y));  // the exact term always stays pinned on top
   return a;
 }
-function applySort(){
-  if(!lastShown.length) return;
+let sorting=false;
+async function applySort(){
+  if(!lastShown.length || sorting) return;
+  sorting=true;
   const key=($("sortby")&&$("sortby").value)||"relevance";
-  renderMatches(sortMatches(lastShown, key).slice(0, wantCount()), lastChecked);
+  let sorted=sortMatches(lastShown, key);
+  // registry-confirm only the open results that are about to be visible, once each
+  const page=sorted.slice(0, shownCount);
+  const toConfirm=page.filter(m=>m.state==="available" && !m.confirmed);
+  if(toConfirm.length){
+    await confirmAvailable(toConfirm);
+    toConfirm.forEach(m=>m.confirmed=true);
+    lastShown=lastShown.filter(m=>m.c.exact || stateShown(m.state));   // drop any that confirmed as taken
+    sorted=sortMatches(lastShown, key);
+  }
+  renderMatches(sorted.slice(0, shownCount), lastChecked, lastShown);
+  const remaining=lastShown.length - shownCount;
+  if(remaining>0){
+    const b=document.createElement("button");
+    b.className="loadmore"; b.type="button";
+    b.textContent=`Load more — ${remaining} more found`;
+    b.onclick=()=>{ shownCount+=PAGE; applySort(); };
+    host.appendChild(b);
+  }
+  sorting=false;
 }
 // RDAP (the registry protocol, server-side) can. Only the results we're about to
 // display are confirmed, so it stays well under RDAP rate limits.
@@ -980,19 +1016,19 @@ async function runSearch(){
   if(!pool.length){ renderMatches([], 0); $("forge").disabled=false; return; }
   searching=true; $("forge").disabled=true; document.body.classList.add("searching-now");
   loadPrices();
-  const want=wantCount(), minS=minScore();
-  const wantBuf = Math.min(pool.length, Math.ceil(want*1.3)); // small buffer so confirmation drop-outs don't shrink the list
+  const want=300, minS=minScore();                          // collect a big pool of available names (paginated below)
+  const wantBuf = Math.min(pool.length, want);
   const filtered = pool.filter(c=>c.exact || c.v.score>=minS);
   host.innerHTML=`<div class="loader"><div class="ring"></div><div class="big">Searching…</div><div id="prog">checking availability</div></div>`;
-  const MAXCHECK = Math.min(filtered.length, Math.max(1000, want*10), 2500);
+  const MAXCHECK = Math.min(filtered.length, 4000);          // check far more candidates than before
   const CHUNK = 40, LANES = 6;   // run several batch requests at once for speed
   const results=[]; let matchCount=0, next=0, checked=0, lastProg=0, lastPaint=0, firstPaint=false;
   function paint(force){
     const now=performance.now();
     if(!force && now-lastPaint<300) return;
     lastPaint=now;
-    const cur=results.filter(r=>r.c.exact || stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,want);
-    if(cur.length){ renderMatches(cur, checked); firstPaint=true; }
+    const shownAll=results.filter(r=>r.c.exact || stateShown(r.state)).sort((a,b)=>a.idx-b.idx);
+    if(shownAll.length){ renderMatches(shownAll.slice(0,shownCount), checked, shownAll); firstPaint=true; }
   }
   async function lane(){
     while(matchCount<wantBuf && next<filtered.length && checked<MAXCHECK){
@@ -1011,12 +1047,10 @@ async function runSearch(){
     }
   }
   await Promise.all(Array.from({length:LANES}, lane));
-  let matches = results.filter(r=>r.c.exact || stateShown(r.state)).sort((a,b)=>a.idx-b.idx).slice(0,wantBuf);
-  renderMatches(matches.slice(0,want), checked);              // show everything collected…
-  await confirmAvailable(matches);                            // …then refine with the registry check
-  lastShown = matches.filter(r=>r.c.exact || stateShown(r.state)); // confirmed, shown — kept for re-sorting
+  lastShown = results.filter(r=>r.c.exact || stateShown(r.state));  // everything found (DNS-level); pages get registry-confirmed on demand
   lastChecked = checked;
-  applySort();                                                // render in the chosen sort order
+  shownCount = PAGE;
+  await applySort();                                          // confirms + renders the first page in the chosen sort order
   document.body.classList.remove("searching-now");
   searching=false; $("forge").disabled=false;
 }
@@ -1257,6 +1291,8 @@ $("trends-geo").addEventListener("change",()=>{ trendsLoaded=false; ideasLoaded=
 loadPrices();
 
 $("sortby").addEventListener("change", applySort);
+$("tld-all").addEventListener("click",()=>document.querySelectorAll('#tlds .chip[data-tld]').forEach(ch=>ch.setAttribute("aria-pressed","true")));
+$("tld-core").addEventListener("click",()=>document.querySelectorAll('#tlds .chip[data-tld]').forEach(ch=>ch.setAttribute("aria-pressed",[".com",".ai",".io",".co"].includes(ch.dataset.tld)?"true":"false")));
 
 // shortlist export buttons
 $("sl-copy").addEventListener("click", copyShortlist);
